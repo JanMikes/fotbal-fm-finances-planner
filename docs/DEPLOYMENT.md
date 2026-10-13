@@ -61,9 +61,9 @@ lily: webhook receiver (non-root) verifies the HMAC and spools the job → root 
   monitor probes it too. lily alerts automatically on an unhealthy container, a failed probe, or an
   expiring certificate.
 - **TLS:** Traefik `le` resolver (ACME HTTP-01) for `marketing.fotbal-fm.cz` (Webglobe DNS), so the
-  DNS record must point at lily before the certificate can issue. The legacy host
-  `marketing.fotbal-fm.thedevs.cz` keeps a `le-dns` (Cloudflare DNS-01) cert and a router that
-  308-redirects to the new domain (path + query kept, so old magic links still work).
+  DNS record must point at lily before the certificate can issue. The original host
+  `marketing.fotbal-fm.thedevs.cz` (Cloudflare, `le-dns`) was deprovisioned on 2026-10-13: router,
+  DNS record and certificate removed.
 
 ### What lily expects from the image (checked by the `e2e` job)
 - Listens on `0.0.0.0:3000` and starts with `node server.js` (Next.js standalone). Runs as uid **1001**,
@@ -168,14 +168,10 @@ lands before steps 1–6, the deploy fails.
    - Verify on the box: `source /srv/deploy/lib.sh && dump_secrets fotbal-fm-finances-planner`
      must report **4 key(s)**. It prints a count, never values.
 
-4. **[HUMAN] DNS.** Current production domain (since 2026-10-13): Webglobe zone `fotbal-fm.cz`,
-   `marketing.fotbal-fm.cz. 60 CNAME fotbal-fm.cz.` (→ lily). It must resolve to lily before the
-   first deploy (HTTP-01). The original setup below is kept for the legacy redirect host —
-   Cloudflare zone `thedevs.cz`: a record
-   **`CNAME marketing.fotbal-fm` → `lily.srv.thedevs.cz`**, proxy status **DNS only (grey cloud)**,
-   TTL Auto. Today the name falls through to the zone wildcard `*.thedevs.cz`, which points at the
-   old server (spare), so the explicit record is required. Keep it DNS-only: Traefik terminates TLS
-   and CrowdSec needs real client IPs, and the Cloudflare proxy can buffer SSE.
+4. **[HUMAN] DNS.** Webglobe zone `fotbal-fm.cz`: `marketing.fotbal-fm.cz. 60 CNAME fotbal-fm.cz.`
+   (→ lily, 91.98.188.211). It must resolve to lily before the first deploy, because the
+   certificate uses HTTP-01. Do not put a proxy/CDN in front: Traefik terminates TLS, CrowdSec
+   needs real client IPs and a proxy can buffer SSE.
 
 5. **[AGENT → HUMAN reviews] Commit** the lily.srv changes (step 0) and this repo's changes.
 
@@ -278,6 +274,6 @@ configuring per app.
 | Deploy log: pull `401` / `denied` | The GHCR package is private (step 8). |
 | Deploy log: migration failed | The old version is still serving. Fix the migration and push again. |
 | Rollout reverted / container `unhealthy` | `/api/health` not answering on `127.0.0.1:3000` (check `HOSTNAME=0.0.0.0`, DB reachability, `wget` in the image). Logs: Loki `{app="fotbal-fm-finances-planner"}`. |
-| The browser reaches an old/unknown server, or gets a cert error | The DNS record is missing or proxied (step 4). Check with `dig +short marketing.fotbal-fm.cz`; it should resolve to `lily.srv.thedevs.cz` / `91.98.188.211`. |
+| The browser reaches an old/unknown server, or gets a cert error | The DNS record is missing or proxied (step 4). Check with `dig +short marketing.fotbal-fm.cz`; it should resolve (via `fotbal-fm.cz`) to `91.98.188.211`. |
 | Uploads fail with `EACCES` | `/data/uploads` in the image is not owned by uid 1001, so the volume was initialised root-owned. Fix the Dockerfile; for an existing volume, run `chown -R 1001:1001` on it once from a throwaway container. |
 | Many 403s / captcha for one client | CrowdSec `http-probing`. A client stuck in a tight 401 reconnect loop (SSE) can trip it, so the client must back off on 401/403. |
