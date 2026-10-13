@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { applyDraft, budgetPatch, budgetView, monthInputValue } from "@/features/team/budgetModel";
 import { adoptCandidates, adoptConfirmText, dropToMove, dropTooltip, resolveDropPos } from "@/features/team/dropZone";
+import {
+  assignedTasksLabel,
+  budgetFlagTitle,
+  memberWord,
+  parentSelectOptions,
+  personStatsTitle,
+  taskWord,
+  unitBackground,
+  unitInk,
+} from "@/features/team/orgText";
 import type { Budget } from "@/lib/types";
 import { person, unit } from "./fixtures";
 
@@ -112,14 +122,77 @@ describe("budget box model", () => {
   it("draft texts override stored numbers, digits only", () => {
     expect(applyDraft(budget, { spolek: "1\u00a0000\u00a0Kč", asAmount: "" })).toMatchObject({ spolek: 1000, asAmount: 0, monthlyInstallment: 7500 });
   });
+  it("draft amounts from MoneyInput (number | null = emptied) override stored numbers", () => {
+    expect(applyDraft(budget, { spolek: 50000, asAmount: null })).toEqual({ ...budget, spolek: 50000, asAmount: 0 });
+    expect(applyDraft(budget, {})).toEqual(budget);
+  });
   it("budgetPatch stores digits only and sets installmentFrom on the first non-zero installment", () => {
     expect(budgetPatch("spolek", "25 000,-", budget, now)).toEqual({ spolek: 25000 });
     expect(budgetPatch("monthlyInstallment", "8 000", budget, now)).toEqual({ monthlyInstallment: 8000 });
     expect(budgetPatch("monthlyInstallment", "8 000", { ...budget, installmentFrom: null }, now)).toEqual({ monthlyInstallment: 8000, installmentFrom: "2026-10" });
     expect(budgetPatch("monthlyInstallment", "abc", { ...budget, installmentFrom: null }, now)).toEqual({ monthlyInstallment: 0 });
   });
+  it("budgetPatch takes parsed amounts too (null = emptied = 0)", () => {
+    expect(budgetPatch("asAmount", 12000, budget, now)).toEqual({ asAmount: 12000 });
+    expect(budgetPatch("spolek", null, budget, now)).toEqual({ spolek: 0 });
+    expect(budgetPatch("monthlyInstallment", 5000, { ...budget, installmentFrom: null }, now)).toEqual({ monthlyInstallment: 5000, installmentFrom: "2026-10" });
+    expect(budgetPatch("monthlyInstallment", null, { ...budget, installmentFrom: null }, now)).toEqual({ monthlyInstallment: 0 });
+  });
   it("month input value", () => {
     expect(monthInputValue("2026-08-01")).toBe("2026-08");
     expect(monthInputValue(null)).toBe("");
+  });
+});
+
+describe("org texts", () => {
+  it("Czech plurals on the cards and in the member form", () => {
+    expect([0, 1, 2, 4, 5, 21].map(taskWord)).toEqual(["úkolů", "úkol", "úkoly", "úkoly", "úkolů", "úkolů"]);
+    expect([0, 1, 3, 7].map(memberWord)).toEqual(["členů", "člen", "členové", "členů"]);
+    expect(assignedTasksLabel(0)).toBe("0 přiřazených úkolů");
+    expect(assignedTasksLabel(1)).toBe("1 přiřazený úkol");
+    expect(assignedTasksLabel(3)).toBe("3 přiřazené úkoly");
+    expect(assignedTasksLabel(12)).toBe("12 přiřazených úkolů");
+  });
+  it("tooltips", () => {
+    expect(personStatsTitle(3, 1)).toBe("Řeší 3 rozpracované úkoly, vede 1 rozpracovaný úkol");
+    expect(personStatsTitle(0, 5)).toBe("Řeší 0 rozpracovaných úkolů, vede 5 rozpracovaných úkolů");
+    expect(budgetFlagTitle(25000, "green")).toBe("Budget 25\u00a0000\u00a0Kč — v budgetu");
+    expect(budgetFlagTitle(1000, "red")).toBe("Budget 1\u00a0000\u00a0Kč — na dluh");
+    expect(budgetFlagTitle(1000, "blue")).toBe("Budget 1\u00a0000\u00a0Kč — budoucnost");
+  });
+});
+
+describe("unit card colours (text ≥ 4.5:1)", () => {
+  it("navy text on light colours and the brand blue, white on mid tones, light blue on dark blues", () => {
+    for (const c of ["#c4c8ce", "#4fbde4", "#d98a00", "#0099cf", "#0099CF"]) expect(unitInk(c)).toBe("lt");
+    for (const c of ["#63666b", "#c62f28", "#1f8a4c", "#6b4fa8"]) expect(unitInk(c)).toBe("warm");
+    for (const c of ["#00588e", "#093f6b", "#1b2341", null, undefined, ""]) expect(unitInk(c)).toBe("");
+  });
+  it("the palette green gets a deeper card background, other colours are kept", () => {
+    expect(unitBackground("#1f8a4c")).toBe("#1a7a42");
+    expect(unitBackground("#00588e")).toBe("#00588e");
+  });
+});
+
+describe("parentSelectOptions (Nadřízený / Zařazení)", () => {
+  const u = unit({ id: "u1", name: "Web" });
+  const p = person({ id: "p1", name: "Jana", role: "Grafika" });
+  const q = person({ id: "p2", name: "Petr", role: null });
+  it("empty option first, then the groups Kategorie and Členové (role = meta + keyword)", () => {
+    expect(parentSelectOptions("— nikdo —", { units: [u], persons: [p, q] })).toEqual([
+      { value: "", label: "— nikdo —" },
+      { label: "Kategorie", options: [{ value: "u1", label: "Web" }] },
+      {
+        label: "Členové",
+        options: [
+          { value: "p1", label: "Jana", meta: "Grafika", keywords: "Grafika" },
+          { value: "p2", label: "Petr", meta: undefined, keywords: undefined },
+        ],
+      },
+    ]);
+  });
+  it("empty groups are omitted", () => {
+    expect(parentSelectOptions("— nejvyšší úroveň —", { units: [], persons: [] })).toEqual([{ value: "", label: "— nejvyšší úroveň —" }]);
+    expect(parentSelectOptions("x", { units: [u], persons: [] })).toHaveLength(2);
   });
 });
