@@ -3,12 +3,13 @@ import path from "node:path";
 import pg from "pg";
 import { afterAll, beforeEach } from "vitest";
 import type { AppState } from "@/lib/types";
+import { issueSession, SESSION_COOKIE } from "@/server/auth/session";
 import { closeDb } from "@/server/db/client";
 
-const SEED_SQL = readFileSync(path.resolve(__dirname, "../../drizzle/0001_seed_structural_defaults.sql"), "utf8").replaceAll(
-  "--> statement-breakpoint",
-  "",
-);
+/** Data migrations re-applied after every truncate (structural seed + budget default fix). */
+const SEED_SQL = ["0001_seed_structural_defaults.sql", "0002_budget_installment_from_null.sql"]
+  .map((f) => readFileSync(path.resolve(__dirname, "../../drizzle", f), "utf8").replaceAll("--> statement-breakpoint", ""))
+  .join("\n");
 
 let admin: pg.Pool | null = null;
 export function adminPool(): pg.Pool {
@@ -42,13 +43,25 @@ export interface CallResult<T> {
   headers: Headers;
 }
 
-/** Invoke a route handler directly. */
+/** Cookie header with a valid session (route handlers that check auth themselves, e.g. POST /api/attachments). */
+export async function sessionCookie(): Promise<string> {
+  return `${SESSION_COOKIE}=${await issueSession()}`;
+}
+
+/** Invoke a route handler directly (with a valid session cookie unless `anonymous`). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function call<T = any>(
   handler: RouteHandler,
-  opts: { method?: string; path?: string; body?: unknown; params?: Record<string, string>; headers?: Record<string, string> } = {},
+  opts: {
+    method?: string;
+    path?: string;
+    body?: unknown;
+    params?: Record<string, string>;
+    headers?: Record<string, string>;
+    anonymous?: boolean;
+  } = {},
 ): Promise<CallResult<T>> {
-  const headers: Record<string, string> = { ...(opts.headers ?? {}) };
+  const headers: Record<string, string> = { ...(opts.anonymous ? {} : { cookie: await sessionCookie() }), ...(opts.headers ?? {}) };
   let body: BodyInit | undefined;
   if (opts.body instanceof FormData) body = opts.body;
   else if (opts.body !== undefined) {

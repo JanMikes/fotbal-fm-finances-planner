@@ -3,7 +3,11 @@
  * Card drag & drop for both boards — a React port of prototype §7.7 (mouse + touch):
  *  - mouse: drag starts after moving > 5 px; touch/pen: hold 220 ms (navigator.vibrate(15)), moving > 8 px before
  *    that cancels (the gesture becomes a scroll);
- *  - the original card stays in the list as the placeholder (`.ph`) and moves LIVE to the drop position;
+ *  - a placeholder (`.ph`) moves LIVE to the drop position; the ORIGINAL card element stays mounted (hidden) in its
+ *    origin list for the whole drag — a touch sequence keeps targeting the element it started on, and if that element
+ *    were re-mounted under another column its `touchmove`s would no longer reach the document listener, nothing would
+ *    `preventDefault()` them and the browser would turn the gesture into board scrolling (`pointercancel`);
+ *  - `pointercancel` (system gesture / interruption) cancels the drag and reverts, like the org tree;
  *  - a ghost clone (`.card.ghost`, rotated 2°) follows the pointer; the hovered column gets `.over`;
  *  - autoscroll: board horizontally (60 px edge, 12 px/frame), the hovered list vertically (40 px edge, 10 px/frame);
  *  - drop → `onDrop(id, columnId, beforeId)` where beforeId = the next VISIBLE card (null = append);
@@ -34,6 +38,8 @@ export interface GhostView {
 interface Pointer {
   id: string;
   card: HTMLElement;
+  /** Non-passive touchmove listener bound to the touched element itself for the duration of the drag. */
+  unbindTouch: (() => void) | null;
   x0: number;
   y0: number;
   x: number;
@@ -86,7 +92,7 @@ export function useBoardDnd(
     const list = col.querySelector<HTMLElement>(".list");
     p.list = list;
     if (!list) return;
-    const cards = [...list.querySelectorAll<HTMLElement>(".card:not(.ph)")];
+    const cards = [...list.querySelectorAll<HTMLElement>(".card[data-id]:not(.ph):not([data-dragsrc])")];
     const before = cards.find((c) => {
       const r = c.getBoundingClientRect();
       return p.y < r.top + r.height / 2;
@@ -128,6 +134,13 @@ export function useBoardDnd(
     p.dx = p.x0 - r.left;
     p.dy = p.y0 - r.top;
     p.active = true;
+    if (p.touch) {
+      // belt and braces: block panning right at the touch target (it stays attached, see the header comment)
+      const card = p.card;
+      const block = (e: TouchEvent) => e.preventDefault();
+      card.addEventListener("touchmove", block, { passive: false });
+      p.unbindTouch = () => card.removeEventListener("touchmove", block);
+    }
     document.body.classList.add("dragging");
     setGhost({ id: p.id, width: r.width, transform: transformOf(p) });
     commit({ id: p.id, colId: p.origin.colId, beforeId: p.origin.beforeId, overCol: null, touched: new Set() });
@@ -142,6 +155,7 @@ export function useBoardDnd(
       const p = P.current;
       if (!p) return;
       P.current = null;
+      p.unbindTouch?.();
       if (!p.active) return; // a plain click falls through to onClick
       if (raf.current != null) cancelAnimationFrame(raf.current);
       raf.current = null;
@@ -184,7 +198,7 @@ export function useBoardDnd(
     };
     const onUp = () => endDrag();
     const onCancel = () => {
-      if (P.current?.active) endDrag();
+      if (P.current?.active) endDrag(true); // cancel = revert (same as the org tree)
       else {
         if (pressTimer.current) clearTimeout(pressTimer.current);
         P.current = null;
@@ -206,6 +220,7 @@ export function useBoardDnd(
       document.removeEventListener("contextmenu", onContext);
       if (pressTimer.current) clearTimeout(pressTimer.current);
       if (raf.current != null) cancelAnimationFrame(raf.current);
+      P.current?.unbindTouch?.();
       document.body.classList.remove("dragging");
     };
   }, [endDrag, moveDrag, startDrag]);
@@ -218,6 +233,7 @@ export function useBoardDnd(
       P.current = {
         id,
         card: e.currentTarget,
+        unbindTouch: null,
         x0: e.clientX,
         y0: e.clientY,
         x: e.clientX,

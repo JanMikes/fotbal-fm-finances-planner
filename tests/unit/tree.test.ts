@@ -13,7 +13,6 @@ import {
   personsInOrder,
   rootsOf,
   unitTaskCount,
-  wouldCreateCycle,
 } from "@/lib/tree";
 import { CATS } from "@/lib/constants";
 import { person, task, unit } from "./fixtures";
@@ -35,12 +34,8 @@ describe("tree", () => {
     expect(childrenOf(nodes, null).map((n) => n.id)).toEqual(["boss", "r2", "o"]);
   });
 
-  it("descendants and cycle checks", () => {
+  it("descendants (incl. self)", () => {
     expect([...descendantsOf(nodes, "u")].sort()).toEqual(["b", "c", "sub", "u"]);
-    expect(wouldCreateCycle(nodes, "u", "c")).toBe(true);
-    expect(wouldCreateCycle(nodes, "u", "u")).toBe(true);
-    expect(wouldCreateCycle(nodes, "u", "a")).toBe(false);
-    expect(wouldCreateCycle(nodes, "u", null)).toBe(false);
   });
 
   it("people count counts persons only", () => {

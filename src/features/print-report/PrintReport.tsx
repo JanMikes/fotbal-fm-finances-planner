@@ -11,7 +11,7 @@
  * so close / reopen (optimistic store actions) and realtime refetches update it immediately.
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { formatDate, kcs, nf, thousandsLabel } from "@/lib/format";
+import { formatDate, kcs, NBSP, nf, thousandsLabel } from "@/lib/format";
 import { buildYearReport } from "@/lib/report";
 import { useActions, useAppState } from "@/lib/store/react";
 import type { PrintItem } from "@/lib/types";
@@ -77,7 +77,7 @@ export function PrintReport({ onBack }: { onBack: () => void }) {
     <div className="yv-r" key={t.id}>
       <span className="nm">{t.title}</span>
       <span className="ty">{typeName.get(t.typeId) ?? "—"}</span>
-      <span className="q">{t.quantity ? nf(t.quantity) + " ks" : ""}</span>
+      <span className="q">{t.quantity ? nf(t.quantity) + NBSP + "ks" : ""}</span>
       <span className={t.paidByClub ? "pr ok" : "pr"}>{kcs(t.price)}</span>
     </div>
   );
@@ -127,7 +127,7 @@ export function PrintReport({ onBack }: { onBack: () => void }) {
             <span>Celkem utraceno</span>
             <b>{kcs(r.total)}</b>
             <i>
-              {r.itemCount} položek · {nf(r.quantity)} ks
+              {r.itemCount} položek · {nf(r.quantity)}{NBSP}ks
             </i>
           </div>
           <div className="kp">
@@ -187,7 +187,7 @@ export function PrintReport({ onBack }: { onBack: () => void }) {
                 <div className="tn">
                   <b>{t.name}</b>
                   <span>
-                    {t.count}× · {nf(t.quantity)} ks
+                    {t.count}× · {nf(t.quantity)}{NBSP}ks
                   </span>
                 </div>
                 <div className="tb">

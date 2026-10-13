@@ -60,7 +60,8 @@ export interface TaskFilter {
 export function taskVisible(t: Task, f: TaskFilter): boolean {
   if (!inGroup(t.category, f.filter)) return false;
   if (!monthMatches(t.dueDate, f.month)) return false;
-  if (f.mine && t.leadId !== f.me && t.ownerId !== f.me) return false;
+  // no identity (e.g. no members yet) → nothing is „mine" (prototype: `t.lead !== S.me && t.owner !== S.me`)
+  if (f.mine && (!f.me || (t.leadId !== f.me && t.ownerId !== f.me))) return false;
   if (f.q) {
     const q = f.q.toLowerCase();
     if (!(t.title + " " + t.description + " " + t.category).toLowerCase().includes(q)) return false;
@@ -83,13 +84,18 @@ function monthRange(now: Date, from: number, toExclusive: number): string[] {
   return out;
 }
 
+const isMonthKey = (m: MonthFilter | undefined): m is string => !!m && /^\d{4}-\d{2}$/.test(m);
+
 /**
  * Task month select (prototype §7.6): previous + current + 11 next months + every month any task is due,
- * sorted; counts respect the group filter only. Includes "all" first and "none" last.
+ * sorted; counts respect the group filter only. Includes "all" first and "none" last. The currently `selected`
+ * month is always included, so the select label and the actual filtering never disagree (e.g. a persisted month
+ * that dropped out of the range).
  */
-export function taskMonthOptions(tasks: readonly Task[], group: string, now: Date = new Date()): MonthOption[] {
+export function taskMonthOptions(tasks: readonly Task[], group: string, now: Date = new Date(), selected?: MonthFilter): MonthOption[] {
   const set = new Set(monthRange(now, -1, 12));
   for (const t of tasks) if (t.dueDate) set.add(t.dueDate.slice(0, 7));
+  if (isMonthKey(selected)) set.add(selected);
   const months = [...set].sort();
   return [
     { value: "all", label: "Všechny měsíce" },
@@ -145,11 +151,13 @@ export function sumPrices(items: readonly PrintItem[]): number {
 /**
  * Print month select (prototype §9.1): 2 previous + current + 5 next months + months of (non-archived) items;
  * label carries the Kč sum for the active type filter, e.g. `Říjen 2026 · 4 500 Kč`. Archived items excluded (DECISIONS #9).
+ * The currently `selected` month is always included (see `taskMonthOptions`).
  */
-export function printMonthOptions(items: readonly PrintItem[], typeId: string, now: Date = new Date()): MonthOption[] {
+export function printMonthOptions(items: readonly PrintItem[], typeId: string, now: Date = new Date(), selected?: MonthFilter): MonthOption[] {
   const active = items.filter((i) => !i.archived);
   const set = new Set(monthRange(now, -2, 6));
   for (const i of active) if (i.realizationDate) set.add(i.realizationDate.slice(0, 7));
+  if (isMonthKey(selected)) set.add(selected);
   const months = [...set].sort();
   return [
     { value: "all", label: "Všechny měsíce" },

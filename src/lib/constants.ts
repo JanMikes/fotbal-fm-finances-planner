@@ -31,12 +31,12 @@ export const GROUPS: Readonly<Record<string, readonly string[]>> = {
   Foto: ["Foto"],
 };
 
-export const GROUP_NAMES: readonly string[] = Object.keys(GROUPS);
+const GROUP_NAMES: readonly string[] = Object.keys(GROUPS);
 
 /** Group filter options in display order: Vše + groups. */
 export const GROUP_FILTERS: readonly string[] = [ALL, ...GROUP_NAMES];
 
-export const OTHER: readonly string[] = ["Celý klub"];
+const OTHER: readonly string[] = ["Celý klub"];
 
 /** All task categories; CATS[0] === "Celý klub". */
 export const CATS: readonly string[] = [...OTHER, ...Object.values(GROUPS).flat()];
@@ -105,13 +105,6 @@ export const BUDGET_COLORS: ReadonlyArray<{ value: BudgetColorValue; label: stri
   { value: "green", label: "V budgetu", color: "#1f8a4c" },
   { value: "blue", label: "Budoucnost", color: "var(--fm-blue)" },
 ];
-
-export const COLOR_GREEN = "#1f8a4c";
-export const COLOR_RED = "#c62f28";
-
-export const DEFAULT_TASK_COLUMNS: readonly string[] = ["Nápady", "K řešení", "Probíhá", "Ke kontrole", "Hotovo"];
-export const DEFAULT_PRINT_COLUMNS: readonly string[] = ["Poptávka", "Ve výrobě", "Hotovo"];
-export const DEFAULT_PRINT_TYPES: readonly string[] = ["Letáky", "Vizitky", "Plakáty", "Bannery", "Roll-upy", "Samolepky", "Brožury"];
 
 /** Max attachment size (25 MB, keeps uploads under the Traefik 60 s read timeout). */
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;

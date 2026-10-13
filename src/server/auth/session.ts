@@ -1,7 +1,11 @@
 /**
- * Stateless session cookie: `v1.<issuedAtMs>.<base64url HMAC-SHA256(SESSION_SECRET, "v1.<issuedAtMs>")>`.
- * Rotating SESSION_SECRET invalidates every cookie. Uses Web Crypto so it works in the proxy and in route handlers.
+ * Stateless session cookie: `v1.<issuedAtMs>.<base64url HMAC-SHA256(key, "v1.<issuedAtMs>")>` where
+ * key = SESSION_SECRET + "." + base64url(SHA-256(APP_PASSWORD + "\n" + APP_ACCESS_TOKEN)) (see sessionSigningKey).
+ * Rotating SESSION_SECRET, APP_PASSWORD or APP_ACCESS_TOKEN therefore invalidates every cookie.
+ * Uses Web Crypto so it works in the proxy and in route handlers.
  */
+import { env } from "../env";
+
 export const SESSION_COOKIE = "fmp_session";
 export const SESSION_MAX_AGE_S = 365 * 24 * 60 * 60; // 1 year
 
@@ -36,6 +40,36 @@ export async function secretEquals(provided: string, expected: string): Promise<
     crypto.subtle.digest("SHA-256", enc.encode(expected)),
   ]);
   return safeEqual(b64url(a), b64url(b)) && provided.length > 0;
+}
+
+let keyCache: { input: string; key: string } | null = null;
+
+/**
+ * HMAC key for session cookies, derived from SESSION_SECRET and a hash of APP_PASSWORD + APP_ACCESS_TOKEN, so that
+ * rotating any of the three logs everyone out (DEPLOYMENT.md §3).
+ */
+export async function sessionSigningKey(
+  secrets: { sessionSecret: string; appPassword: string; accessToken: string } = env,
+): Promise<string> {
+  const { sessionSecret, appPassword, accessToken } = secrets;
+  const input = `${appPassword}\n${accessToken}`;
+  const cacheInput = `${sessionSecret}\u0000${input}`;
+  if (keyCache?.input === cacheInput) return keyCache.key;
+  const epoch = b64url(await crypto.subtle.digest("SHA-256", enc.encode(input)));
+  const key = `${sessionSecret}.${epoch}`;
+  keyCache = { input: cacheInput, key };
+  return key;
+}
+
+/** New cookie value signed with the current derived key. */
+export async function issueSession(now: number = Date.now()): Promise<string> {
+  return createSessionValue(await sessionSigningKey(), now);
+}
+
+/** Whether a cookie value is valid for the current secrets. */
+export async function isValidSession(value: string | undefined | null, now: number = Date.now()): Promise<boolean> {
+  if (!value) return false;
+  return verifySessionValue(value, await sessionSigningKey(), now);
 }
 
 export async function createSessionValue(secret: string, now: number = Date.now()): Promise<string> {

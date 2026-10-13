@@ -1,21 +1,28 @@
 "use client";
 /** Unit (category) form „Kategorie" / „Nová kategorie" (prototype §10.11). */
 import { useEffect, useRef, useState } from "react";
-import type { NodeInput } from "@/lib/api";
+import { Modal } from "@/components/ui/Modal";
+import { useCloseWhenDeleted } from "@/components/ui/useCloseWhenDeleted";
 import { AVPAL, DEFAULT_UNIT_COLOR, UNIT_NAME_SUGGESTIONS } from "@/lib/constants";
+import { changedFields, isEmptyPatch } from "@/lib/patch";
 import { useActions, useAppState } from "@/lib/store/react";
 import { parentOptions } from "@/lib/tree";
 import { ParentSelect } from "./ParentSelect";
-import { TeamModal } from "./TeamModal";
 
 export function UnitForm({ id, parentId, onClose }: { id: string | null; parentId: string | null; onClose: () => void }) {
   const state = useAppState();
   const actions = useActions();
   const ex = id ? state.nodes.find((n) => n.id === id && n.kind === "unit") : undefined;
+  useCloseWhenDeleted(!!id && !ex, onClose);
 
-  const [name, setName] = useState(ex?.name ?? "");
-  const [color, setColor] = useState<string>(ex?.color || DEFAULT_UNIT_COLOR);
-  const [parent, setParent] = useState<string>(ex ? (ex.parentId ?? "") : (parentId ?? ""));
+  const [init] = useState(() => ({
+    name: ex?.name ?? "",
+    color: ex?.color || DEFAULT_UNIT_COLOR,
+    parent: ex ? (ex.parentId ?? "") : (parentId ?? ""),
+  }));
+  const [name, setName] = useState(init.name);
+  const [color, setColor] = useState<string>(init.color);
+  const [parent, setParent] = useState<string>(init.parent);
   const [nameErr, setNameErr] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
 
@@ -38,9 +45,12 @@ export function UnitForm({ id, parentId, onClose }: { id: string | null; parentI
     onClose();
     const parentIdNew = parent || null;
     if (ex) {
-      const patch: NodeInput = { name: n, color: color || null };
-      if ((ex.parentId ?? null) !== parentIdNew) patch.parentId = parentIdNew;
-      void actions.updateNode(ex.id, patch).catch(() => {});
+      // only the changed fields: a concurrent edit (or a move in the tree) by someone else is kept
+      const patch = changedFields(
+        { name: n, color: color || null, parentId: parentIdNew },
+        { name: init.name.trim(), color: init.color || null, parentId: init.parent || null },
+      );
+      if (!isEmptyPatch(patch)) void actions.updateNode(ex.id, patch).catch(() => {});
     } else {
       void actions.createNode({ kind: "unit", name: n, color: color || null, parentId: parentIdNew }).catch(() => {});
     }
@@ -60,10 +70,12 @@ export function UnitForm({ id, parentId, onClose }: { id: string | null; parentI
   };
 
   return (
-    <TeamModal
+    <Modal
       title={ex ? "Kategorie" : "Nová kategorie"}
       onClose={onClose}
-      footer={
+      portal
+      testId="unit-modal"
+      foot={
         <>
           <span className="meta">Pokud se název shoduje s kategorií úkolů, karta ukazuje počet rozpracovaných úkolů.</span>
           {ex && (
@@ -121,6 +133,6 @@ export function UnitForm({ id, parentId, onClose }: { id: string | null; parentI
           <ParentSelect id="uBoss" value={parent} onChange={setParent} emptyLabel="— nejvyšší úroveň —" options={opts} />
         </div>
       </div>
-    </TeamModal>
+    </Modal>
   );
 }

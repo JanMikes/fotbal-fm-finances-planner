@@ -8,6 +8,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { prefsStore, resolveMe, resolvePrFilter, type UiPrefs } from "../prefs";
+import { personsInOrder } from "../tree";
 import type { AppState } from "../types";
 import { createActions, type Actions } from "./actions";
 import { connectRealtime } from "./realtime";
@@ -30,9 +31,21 @@ export function StoreProvider({ children, store: injected, realtime = true }: { 
 
   useEffect(() => {
     void store.load();
-    if (!realtime) return;
-    return connectRealtime(store);
+    // a failed load is retried with backoff; coming back online retries at once
+    const onOnline = () => store.retryNow();
+    window.addEventListener("online", onOnline);
+    const stop = realtime ? connectRealtime(store) : undefined;
+    return () => {
+      window.removeEventListener("online", onOnline);
+      stop?.();
+    };
   }, [store, realtime]);
+
+  // a stored identity that points to a deleted member is reset (the effective identity then falls back to the first member)
+  const nodes = useSyncExternalStore(store.subscribe, () => store.getSnapshot().state?.nodes ?? null, () => null);
+  useEffect(() => {
+    if (nodes && prefs.me && !personsInOrder(nodes).some((p) => p.id === prefs.me)) prefsStore.update({ me: null });
+  }, [nodes, prefs.me]);
 
   const updatePrefs = useCallback((patch: Partial<UiPrefs>) => prefsStore.update(patch), []);
 
@@ -83,6 +96,19 @@ export function usePrefs(): [UiPrefs, (patch: Partial<UiPrefs>) => void] {
 export function StoreGate({ children, loading, error }: { children: ReactNode; loading?: ReactNode; error?: (msg: string) => ReactNode }) {
   const snap = useStoreSnapshot();
   if (snap.state) return <>{children}</>;
-  if (snap.status === "error") return <>{error ? error(snap.error ?? "") : <div className="app-msg">Nepodařilo se načíst data. {snap.error}</div>}</>;
+  if (snap.status === "error") return <>{error ? error(snap.error ?? "") : <LoadError message={snap.error} />}</>;
   return <>{loading ?? <div className="app-msg">Načítám…</div>}</>;
+}
+
+/** Failed first load: message + „Zkusit znovu" (the store also retries automatically with backoff). */
+function LoadError({ message }: { message: string | null }) {
+  const store = useStore();
+  return (
+    <div className="app-msg">
+      Nepodařilo se načíst data. {message}{" "}
+      <button type="button" className="btn outline" onClick={() => void store.load()}>
+        Zkusit znovu
+      </button>
+    </div>
+  );
 }

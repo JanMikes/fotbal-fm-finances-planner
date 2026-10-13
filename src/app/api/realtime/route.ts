@@ -1,4 +1,4 @@
-import { subscribe } from "@/server/realtime/bus";
+import { ensureListening, isListening, RESYNC, subscribe } from "@/server/realtime/bus";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -6,18 +6,19 @@ export const dynamic = "force-dynamic";
 const HEARTBEAT_MS = 25_000;
 
 /**
- * Server-Sent Events. Events:
- *   event: hello   data: {"ok":true}                      (on connect)
- *   event: change  data: {"entity","op","id","clientId"}  (after every committed mutation, any instance)
- *   event: resync  data: {}                               (server LISTEN connection was re-established → refetch)
- * Comment heartbeat every 25 s.
+ * Server-Sent Events. Events (contract in docs/API.md):
+ *   event: hello   data: {"ok":true}                      sent only once this process is LISTENing → client refetches
+ *   event: change  data: {"entity","op","id","clientId"}  after every committed mutation, any instance
+ *   event: resync  data: {}                               LISTEN connection was re-established → client refetches
+ * Comment heartbeat every 25 s (also while waiting for the LISTEN connection).
  */
 export async function GET(req: Request) {
   const encoder = new TextEncoder();
   let cleanup = () => {};
   const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
+    async start(controller) {
       let closed = false;
+      let helloSent = false;
       const write = (chunk: string) => {
         if (closed) return;
         try {
@@ -26,10 +27,21 @@ export async function GET(req: Request) {
           cleanup();
         }
       };
+      const hello = () => {
+        if (helloSent) return;
+        helloSent = true;
+        write(`event: hello\ndata: {"ok":true}\n\n`);
+      };
+      write(`retry: 3000\n\n`);
       const unsubscribe = subscribe({
         send: (payload) => {
-          if (payload === "resync") write(`event: resync\ndata: {}\n\n`);
-          else write(`event: change\ndata: ${payload}\n\n`);
+          if (payload === RESYNC) {
+            if (helloSent) write(`event: resync\ndata: {}\n\n`);
+            else hello();
+            return;
+          }
+          hello(); // (defensive) never deliver a change before the handshake
+          write(`event: change\ndata: ${payload}\n\n`);
         },
         close: () => {
           cleanup();
@@ -48,7 +60,10 @@ export async function GET(req: Request) {
         }
       };
       req.signal.addEventListener("abort", () => cleanup(), { once: true });
-      write(`retry: 3000\nevent: hello\ndata: {"ok":true}\n\n`);
+      // Handshake only after LISTEN is up. If the connection attempt fails, the stream stays open (heartbeats)
+      // and `hello` is sent by the bus's RESYNC broadcast when the reconnect succeeds.
+      await ensureListening();
+      if (isListening()) hello();
     },
     cancel() {
       cleanup();

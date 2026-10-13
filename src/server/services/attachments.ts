@@ -1,13 +1,15 @@
 /** Attachments: files stored on disk in UPLOAD_DIR under random names; links stored as rows. */
 import { randomBytes } from "node:crypto";
-import { createReadStream } from "node:fs";
-import { copyFile, mkdir, stat, unlink, writeFile } from "node:fs/promises";
+import { createReadStream, createWriteStream } from "node:fs";
+import { copyFile, mkdir, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import type { ReadableStream as NodeWebReadableStream } from "node:stream/web";
+import busboy from "busboy";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { MAX_UPLOAD_BYTES } from "@/lib/constants";
-import { normalizeUrl } from "@/lib/format";
 import type { Attachment, ParentKind } from "@/lib/types";
 import { getDb, type DbOrTx } from "../db/client";
 import { attachments, printItems, tasks } from "../db/schema";
@@ -44,16 +46,41 @@ function storagePath(key: string): string {
   return path.join(uploadDir(), key);
 }
 
+/**
+ * The parent must exist. FOR SHARE keeps it from being deleted until this transaction commits; deleteTask /
+ * deletePrintItem take FOR UPDATE first, so an attachment is never committed for an already-deleted parent.
+ */
 async function assertParent(tx: DbOrTx, kind: ParentKind, id: string) {
   const table = kind === "task" ? tasks : printItems;
-  const [row] = await tx.select({ id: table.id }).from(table).where(eq(table.id, id));
+  const [row] = await tx.select({ id: table.id }).from(table).where(eq(table.id, id)).for("share");
   if (!row) throw badRequest(kind === "task" ? "Úkol neexistuje." : "Tiskovina neexistuje.");
 }
 
+const ALLOWED_LINK_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
+
+/**
+ * Normalise + validate a link: `https://` is prepended when there is no scheme; only http, https and mailto are
+ * accepted (no javascript:, data:, file:, custom app protocols, …). Returns null when invalid.
+ */
+export function sanitizeLinkUrl(raw: string): string | null {
+  const u = raw.trim();
+  if (!u || /[\u0000-\u001f\u007f]/.test(u)) return null;
+  const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(u) && !/^[^:/]+:\d/.test(u) ? u : `https://${u}`;
+  let parsed: URL;
+  try {
+    parsed = new URL(withScheme);
+  } catch {
+    return null;
+  }
+  if (!ALLOWED_LINK_PROTOCOLS.has(parsed.protocol)) return null;
+  if (parsed.protocol !== "mailto:" && !parsed.hostname) return null;
+  if (parsed.protocol === "mailto:" && !parsed.pathname) return null;
+  return withScheme;
+}
+
 export async function addLink(input: z.infer<typeof linkSchema>, ctx: Ctx): Promise<Attachment> {
-  const url = normalizeUrl(input.url);
-  if (!/^https?:\/\//i.test(url) && !/^[a-z]+:\/\//i.test(url)) throw badRequest("Neplatný odkaz.");
-  if (/^(javascript|data|vbscript):/i.test(input.url.trim())) throw badRequest("Neplatný odkaz.");
+  const url = sanitizeLinkUrl(input.url);
+  if (!url) throw badRequest("Neplatný odkaz — povolené jsou jen adresy http(s):// a mailto:.");
   return getDb().transaction(async (tx) => {
     await assertParent(tx, input.parentKind, input.parentId);
     const [row] = await tx
@@ -72,22 +99,117 @@ export async function addLink(input: z.infer<typeof linkSchema>, ctx: Ctx): Prom
   });
 }
 
-/** Store an uploaded file (multipart form fields: parentKind, parentId, file, optional id). */
-export async function uploadFile(form: FormData, ctx: Ctx): Promise<Attachment> {
-  const meta = uploadMetaSchema.parse({
-    id: form.get("id") || undefined,
-    parentKind: form.get("parentKind") ?? form.get("parent_kind"),
-    parentId: form.get("parentId") ?? form.get("parent_id"),
-  });
-  const file = form.get("file");
-  if (!(file instanceof File)) throw badRequest("Chybí soubor (pole „file“).");
-  if (file.size > MAX_UPLOAD_BYTES) throw new HttpError(413, "too_large", "Soubor je větší než 25 MB.");
+/** Generous allowance for multipart boundaries + the small text fields around the file. */
+const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
 
-  const key = newStorageKey();
-  await mkdir(uploadDir(), { recursive: true });
-  const target = storagePath(key);
-  await writeFile(target, Buffer.from(await file.arrayBuffer()), { flag: "wx" });
+export const tooLarge = () => new HttpError(413, "too_large", "Soubor je příliš velký (max. 25 MB).");
+
+interface ParsedUpload {
+  fields: Record<string, string>;
+  file: { key: string; name: string; mime: string; size: number } | null;
+}
+
+/**
+ * Stream a multipart upload straight to disk (never buffered in memory). Enforces MAX_UPLOAD_BYTES early via
+ * Content-Length when present and always via a streaming byte cap (also for chunked bodies). One file field
+ * (`file`) per request; other file parts are discarded.
+ */
+async function receiveMultipart(req: Request): Promise<ParsedUpload> {
+  const contentType = req.headers.get("content-type") ?? "";
+  const declared = Number(req.headers.get("content-length") ?? "");
+  if (Number.isFinite(declared) && declared > MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD_BYTES) throw tooLarge();
+  if (!req.body) throw badRequest("Chybí soubor (pole „file“).");
+
+  let bb: busboy.Busboy;
   try {
+    bb = busboy({
+      headers: { "content-type": contentType },
+      defParamCharset: "utf8", // browsers send UTF-8 filenames
+      // busboy emits "limit" when the count REACHES fileSize, so +1 allows exactly MAX_UPLOAD_BYTES
+      limits: { files: 1, fileSize: MAX_UPLOAD_BYTES + 1, fields: 10, fieldSize: 1024, parts: 20, headerPairs: 50 },
+    });
+  } catch {
+    throw badRequest("Neplatná multipart data.");
+  }
+  await mkdir(uploadDir(), { recursive: true });
+  const input = Readable.fromWeb(req.body as unknown as NodeWebReadableStream<Uint8Array>);
+
+  const fields: Record<string, string> = {};
+  let file: ParsedUpload["file"] = null;
+  let written: Promise<void> | null = null;
+  let target: string | null = null;
+  let failure: HttpError | null = null;
+  let fileStream: NodeJS.ReadableStream & { destroy?: (e?: Error) => void } | null = null;
+
+  const done = new Promise<void>((resolve, reject) => {
+    const fail = (err: HttpError) => {
+      if (failure) return;
+      failure = err;
+      input.unpipe(bb);
+      input.destroy();
+      fileStream?.destroy?.(err); // makes the disk pipeline settle (and its partial file gets unlinked below)
+      reject(err);
+    };
+    bb.on("field", (name, value, info) => {
+      if (info.valueTruncated || info.nameTruncated) return fail(badRequest("Neplatná multipart data."));
+      fields[name] = value;
+    });
+    bb.on("file", (name, stream, info) => {
+      if (name !== "file" || file) {
+        stream.resume(); // discard unexpected file parts
+        return;
+      }
+      fileStream = stream;
+      const key = newStorageKey();
+      target = storagePath(key);
+      const entry = { key, name: (info.filename || "soubor").slice(0, 300), mime: info.mimeType || "application/octet-stream", size: 0 };
+      file = entry;
+      stream.on("data", (chunk: Buffer) => {
+        entry.size += chunk.length;
+      });
+      stream.on("limit", () => fail(tooLarge()));
+      written = pipeline(stream, createWriteStream(target, { flags: "wx" })).catch((err) => {
+        if (!failure) fail(new HttpError(500, "internal", "Soubor se nepodařilo uložit."));
+        throw err;
+      });
+      written.catch(() => undefined);
+    });
+    bb.on("partsLimit", () => fail(badRequest("Neplatná multipart data.")));
+    bb.on("filesLimit", () => undefined);
+    bb.on("fieldsLimit", () => fail(badRequest("Neplatná multipart data.")));
+    bb.on("error", () => fail(badRequest("Neplatná multipart data.")));
+    input.on("error", () => fail(badRequest("Přenos souboru byl přerušen.")));
+    bb.on("close", () => {
+      if (!failure) resolve();
+    });
+  });
+
+  try {
+    input.pipe(bb);
+    await done;
+    if (written) await written;
+  } catch (err) {
+    if (written) await (written as Promise<void>).catch(() => undefined);
+    if (target) await unlink(target).catch(() => undefined);
+    throw err instanceof HttpError ? err : badRequest("Neplatná multipart data.");
+  }
+  return { fields, file };
+}
+
+/** Store an uploaded file (multipart form fields: parentKind, parentId, file, optional id). */
+export async function uploadFile(req: Request, ctx: Ctx): Promise<Attachment> {
+  const { fields, file } = await receiveMultipart(req);
+  const cleanup = async () => {
+    if (file) await unlink(storagePath(file.key)).catch(() => undefined);
+  };
+  try {
+    const meta = uploadMetaSchema.parse({
+      id: fields.id || undefined,
+      parentKind: fields.parentKind ?? fields.parent_kind,
+      parentId: fields.parentId ?? fields.parent_id,
+    });
+    if (!file) throw badRequest("Chybí soubor (pole „file“).");
+    const f = file;
     return await getDb().transaction(async (tx) => {
       await assertParent(tx, meta.parentKind, meta.parentId);
       const [row] = await tx
@@ -97,17 +219,17 @@ export async function uploadFile(form: FormData, ctx: Ctx): Promise<Attachment> 
           parentKind: meta.parentKind,
           parentId: meta.parentId,
           kind: "file",
-          name: (file.name || "soubor").slice(0, 300),
-          storageKey: key,
-          sizeBytes: file.size,
-          mime: file.type || "application/octet-stream",
+          name: f.name,
+          storageKey: f.key,
+          sizeBytes: f.size,
+          mime: f.mime,
         })
         .returning();
       await notify(tx, ctx, "attachment", "insert", row.id);
       return mapAttachment(row);
     });
   } catch (err) {
-    await unlink(target).catch(() => undefined);
+    await cleanup();
     throw err;
   }
 }
@@ -137,8 +259,32 @@ export async function deleteAttachmentsOf(tx: DbOrTx, kind: ParentKind, parentId
   };
 }
 
-/** Copy attachments (files duplicated on disk) from one parent to another (used by duplicate). */
-export async function copyAttachments(tx: DbOrTx, kind: ParentKind, fromId: string, toId: string): Promise<Attachment[]> {
+/** Unlink files by storage key (best effort). */
+export async function unlinkStorageKeys(keys: string[]): Promise<void> {
+  await Promise.all(keys.map((k) => unlink(storagePath(k)).catch(() => undefined)));
+}
+
+/** Run `fn`; if it throws (e.g. its transaction rolled back), delete the files whose keys were collected. */
+export async function withFileRollback<T>(collected: string[], fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    await unlinkStorageKeys(collected);
+    throw err;
+  }
+}
+
+/**
+ * Copy attachments (files duplicated on disk) from one parent to another (used by duplicate). New storage keys are
+ * pushed to `copiedKeys` so the caller can unlink them if the surrounding transaction fails (withFileRollback).
+ */
+export async function copyAttachments(
+  tx: DbOrTx,
+  kind: ParentKind,
+  fromId: string,
+  toId: string,
+  copiedKeys: string[] = [],
+): Promise<Attachment[]> {
   const rows = await tx.select().from(attachments).where(and(eq(attachments.parentKind, kind), eq(attachments.parentId, fromId)));
   const out: Attachment[] = [];
   for (const r of rows.sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
@@ -147,6 +293,7 @@ export async function copyAttachments(tx: DbOrTx, kind: ParentKind, fromId: stri
       storageKey = newStorageKey();
       try {
         await copyFile(storagePath(r.storageKey), storagePath(storageKey));
+        copiedKeys.push(storageKey);
       } catch {
         continue; // source file missing on disk — skip it
       }

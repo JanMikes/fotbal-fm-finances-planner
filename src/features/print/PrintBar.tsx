@@ -11,8 +11,8 @@ export function PrintBar({ q, onQ, total, onTypes, onYear }: { q: string; onQ: (
   const state = useAppState();
   const [prefs, updatePrefs] = usePrefs();
   const types = printTypeOptions(state.printItems, state.printTypes);
-  const months = printMonthOptions(state.printItems, prefs.prFilter);
   const month = prefs.prMonth || "all";
+  const months = printMonthOptions(state.printItems, prefs.prFilter, new Date(), month);
   return (
     <div className="bar" id="pbar">
       <div className="sub">

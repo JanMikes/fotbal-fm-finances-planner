@@ -135,6 +135,7 @@ export function TeamTab() {
         overId={view.overId}
         overPos={view.overPos}
       />
+      {state.nodes.length === 0 && <p className="org-empty">{"Zatím tu nikdo není — začněte tlačítkem +\u00a0Přidat\u00a0člena."}</p>}
       <div id="oTip" ref={tipRef} />
       {info && infoNode?.info && <InfoPopover name={infoNode.name} info={infoNode.info} anchor={info.anchor} />}
       {modal?.kind === "member" && <MemberForm key={modal.seq} id={modal.id} parentId={modal.parentId} onClose={close} onOpenMember={(id) => open("member", id)} />}

@@ -82,6 +82,6 @@ describe("optimistic transitions", () => {
     expect(d.nodes.find((n) => n.id === "a2")?.name).toBe("Jana (kopie)");
     expect(o.setBudget(s, { spolek: 5 }).budget.spolek).toBe(5);
     const att = { id: "x", parentKind: "task" as const, parentId: "t", kind: "link" as const, name: "", url: "https://a", sizeBytes: null, mime: null, createdAt: "" };
-    expect(o.removeAttachment(o.addAttachment(s, att), "x").attachments).toEqual([]);
+    expect(o.removeAttachment({ ...s, attachments: [att] }, "x").attachments).toEqual([]);
   });
 });

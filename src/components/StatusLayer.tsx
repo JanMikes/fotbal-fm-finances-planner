@@ -2,7 +2,8 @@
 /**
  * Non-prototype, deliberately subtle status UI:
  *  - error toast for `snapshot.error` (failed mutation / load; the store already rolled back), auto-hides after 6 s;
- *  - „Offline" pill when the realtime connection has been down for > 4 s (the store refetches on reconnect);
+ *  - „Offline" pill when the realtime connection has been down — or refetching /api/state has kept failing — for > 4 s
+ *    (the store retries with backoff and refetches on reconnect);
  *  - silent refetch when the tab becomes visible again (laptop sleep, background tab).
  */
 import { useEffect, useState } from "react";
@@ -20,14 +21,15 @@ export function StatusLayer() {
   }, [snap.error, store]);
 
   const loaded = !!snap.state;
+  const healthy = snap.online && !snap.stale;
   useEffect(() => {
-    if (snap.online || !loaded) {
+    if (healthy || !loaded) {
       const t = setTimeout(() => setOffline(false), 0);
       return () => clearTimeout(t);
     }
     const t = setTimeout(() => setOffline(true), 4000);
     return () => clearTimeout(t);
-  }, [snap.online, loaded]);
+  }, [healthy, loaded]);
 
   useEffect(() => {
     const onVisible = () => {

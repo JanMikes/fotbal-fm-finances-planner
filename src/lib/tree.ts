@@ -40,12 +40,6 @@ export function descendantsOf(nodes: readonly OrgNode[], id: string): Set<string
   return s;
 }
 
-/** True when placing `id` under `newParentId` would create a cycle (parent is self or a descendant). */
-export function wouldCreateCycle(nodes: readonly OrgNode[], id: string, newParentId: string | null): boolean {
-  if (!newParentId) return false;
-  return descendantsOf(nodes, id).has(newParentId);
-}
-
 /** Number of PERSONS in the subtree below `id` (DECISIONS #3: people, not units). */
 export function peopleCount(nodes: readonly OrgNode[], id: string): number {
   const desc = descendantsOf(nodes, id);
@@ -54,7 +48,7 @@ export function peopleCount(nodes: readonly OrgNode[], id: string): number {
 }
 
 /** True when a unit name matches a task category or a category group. */
-export function unitMatchesCategory(name: string, categories: readonly string[]): boolean {
+function unitMatchesCategory(name: string, categories: readonly string[]): boolean {
   return name in GROUPS || categories.includes(name);
 }
 

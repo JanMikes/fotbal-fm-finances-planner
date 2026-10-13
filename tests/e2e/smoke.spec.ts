@@ -6,7 +6,7 @@ const TOKEN = process.env.APP_ACCESS_TOKEN ?? "dev-token";
 test("health endpoint answers without auth", async ({ request }) => {
   const res = await request.get("/api/health");
   expect(res.status()).toBe(200);
-  expect(await res.json()).toEqual({ ok: true });
+  expect(await res.json()).toMatchObject({ ok: true });
 });
 
 test("API requires the session cookie", async ({ request }) => {

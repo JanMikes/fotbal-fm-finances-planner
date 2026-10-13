@@ -53,7 +53,7 @@ export function parsePrefs(raw: string | null): UiPrefs {
   };
 }
 
-export function loadPrefs(): UiPrefs {
+function loadPrefs(): UiPrefs {
   try {
     return parsePrefs(window.localStorage.getItem(UI_PREFS_KEY));
   } catch {
@@ -61,7 +61,7 @@ export function loadPrefs(): UiPrefs {
   }
 }
 
-export function savePrefs(p: UiPrefs): void {
+function savePrefs(p: UiPrefs): void {
   try {
     window.localStorage.setItem(UI_PREFS_KEY, JSON.stringify(p));
   } catch {

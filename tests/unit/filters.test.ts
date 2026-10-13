@@ -57,6 +57,9 @@ describe("taskVisible", () => {
     expect(taskVisible(task({ dueDate: null }), { ...base, month: "none" })).toBe(true);
     expect(taskVisible(t, { ...base, mine: true })).toBe(true);
     expect(taskVisible(t, { ...base, mine: true, me: "other" })).toBe(false);
+    // no identity (no members yet): nothing is „mine", not even unassigned tasks
+    expect(taskVisible(task({ leadId: null, ownerId: null }), { ...base, mine: true, me: null })).toBe(false);
+    expect(taskVisible(task({ leadId: null, ownerId: null }), { ...base, mine: false, me: null })).toBe(true);
     expect(taskVisible(t, { ...base, q: "a3" })).toBe(true);
     expect(taskVisible(t, { ...base, q: "muži a" })).toBe(true);
     expect(taskVisible(t, { ...base, q: "xyz" })).toBe(false);
@@ -94,8 +97,20 @@ describe("month options", () => {
     const opts = printMonthOptions(items, "ty1", now);
     const months = opts.slice(1, -1).map((o) => o.value);
     expect(months).toEqual(["2026-08", "2026-09", "2026-10", "2026-11", "2026-12", "2027-01", "2027-02", "2027-03"]);
-    expect(opts.find((o) => o.value === "2026-10")?.label).toBe("Říjen 2026 · 4 500 Kč");
-    expect(printMonthOptions(items, "Vše", now).find((o) => o.value === "2026-10")?.label).toBe("Říjen 2026 · 5 500 Kč");
+    expect(opts.find((o) => o.value === "2026-10")?.label).toBe("Říjen 2026 · 4\u00a0500\u00a0Kč");
+    expect(printMonthOptions(items, "Vše", now).find((o) => o.value === "2026-10")?.label).toBe("Říjen 2026 · 5\u00a0500\u00a0Kč");
+  });
+
+  it("always offers the selected month, so the select label matches the filtering", () => {
+    // a persisted month that dropped out of the generated range (no task due then / its items archived)
+    const t = taskMonthOptions([], "Vše", now, "2025-01");
+    expect(t.map((o) => o.value)).toContain("2025-01");
+    expect(t.find((o) => o.value === "2025-01")?.label).toBe("Leden 2025");
+    const p = printMonthOptions([printItem({ realizationDate: "2025-12-01", archived: true })], "Vše", now, "2025-12");
+    expect(p.map((o) => o.value)).toContain("2025-12");
+    // "all" / "none" are never duplicated
+    expect(taskMonthOptions([], "Vše", now, "none").filter((o) => o.value === "none")).toHaveLength(1);
+    expect(taskMonthOptions([], "Vše", now, "all").filter((o) => o.value === "all")).toHaveLength(1);
   });
 });
 

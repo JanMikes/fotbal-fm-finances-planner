@@ -46,15 +46,16 @@ export function Board<T extends BoardItem>(props: BoardProps<T>) {
   for (const items of visible.values()) for (const it of items) byId.set(it.id, it);
   const dragged = drag ? byId.get(drag.id) : undefined;
 
-  /** Items to render in a column, with the dragged card placed at the live placeholder position. */
-  const itemsFor = (colId: string): readonly T[] => {
-    const base = visible.get(colId) ?? [];
-    if (!drag || !dragged) return base;
-    const rest = base.filter((t) => t.id !== drag.id);
-    if (drag.colId !== colId) return rest;
-    const i = drag.beforeId ? rest.findIndex((t) => t.id === drag.beforeId) : -1;
-    const out = [...rest];
-    out.splice(i < 0 ? out.length : i, 0, dragged);
+  /**
+   * Entries to render in a column. While dragging, the original card stays at its place (hidden, `data-dragsrc`)
+   * so the touched DOM node is never re-mounted, and a separate placeholder (`.ph`) shows the live drop position.
+   */
+  const entriesFor = (colId: string): Array<{ item: T; ph: boolean }> => {
+    const base = (visible.get(colId) ?? []).map((item) => ({ item, ph: false }));
+    if (!drag || !dragged || drag.colId !== colId) return base;
+    const at = drag.beforeId ? base.findIndex((e) => e.item.id === drag.beforeId) : -1;
+    const out = [...base];
+    out.splice(at < 0 ? out.length : at, 0, { item: dragged, ph: true });
     return out;
   };
 
@@ -62,8 +63,9 @@ export function Board<T extends BoardItem>(props: BoardProps<T>) {
     <main className={`board${mode === "print" ? " pboard" : ""}`} id="board" ref={boardRef}>
       {columns.map((c) => {
         const original = visible.get(c.id) ?? [];
-        const items = itemsFor(c.id);
-        const showEmpty = items.length === 0 && !(drag && drag.touched.has(c.id));
+        const entries = entriesFor(c.id);
+        const shown = entries.filter((e) => e.ph || e.item.id !== drag?.id);
+        const showEmpty = shown.length === 0 && !(drag && drag.touched.has(c.id));
         return (
           <section key={c.id} className={`col${drag?.overCol === c.id ? " over" : ""}`} data-col={c.id}>
             <div className="colh">
@@ -81,22 +83,29 @@ export function Board<T extends BoardItem>(props: BoardProps<T>) {
               )}
             </div>
             <div className="list" data-list={c.id}>
-              {items.map((t, idx) => (
-                <div
-                  key={t.id}
-                  className={`card${drag?.id === t.id ? " ph" : ""}`}
-                  data-id={t.id}
-                  onPointerDown={(e) => {
-                    const next = items[idx + 1]?.id ?? null;
-                    cardPointerDown(e, t.id, c.id, next);
-                  }}
-                  onClick={() => {
-                    if (!wasDragging()) onOpen(t.id);
-                  }}
-                >
-                  {renderCard(t)}
-                </div>
-              ))}
+              {entries.map(({ item: t, ph }) =>
+                ph ? (
+                  <div key=" ph" className="card ph" aria-hidden="true">
+                    {renderCard(t)}
+                  </div>
+                ) : (
+                  <div
+                    key={t.id}
+                    className="card"
+                    data-id={t.id}
+                    {...(drag?.id === t.id ? { "data-dragsrc": "", style: { display: "none" } } : {})}
+                    onPointerDown={(e) => {
+                      const next = original[original.findIndex((x) => x.id === t.id) + 1]?.id ?? null;
+                      cardPointerDown(e, t.id, c.id, next);
+                    }}
+                    onClick={() => {
+                      if (!wasDragging()) onOpen(t.id);
+                    }}
+                  >
+                    {renderCard(t)}
+                  </div>
+                ),
+              )}
               {showEmpty && <div className="empty-col">{emptyText}</div>}
             </div>
             <button className="add" type="button" data-addto={c.id} onClick={() => !wasDragging() && onAdd(c.id)}>

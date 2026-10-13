@@ -21,10 +21,13 @@ RUN npm run build && npm run build:migrate
 # ---------------------------------------------------------------- runtime
 FROM ${NODE_IMAGE} AS runner
 WORKDIR /app
+# TZ: the club's timezone (Node resolves it via its bundled ICU data; server code also uses explicit
+# Europe/Prague logic in src/server/time.ts, so this is belt and braces).
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     HOSTNAME=0.0.0.0 \
     PORT=3000 \
+    TZ=Europe/Prague \
     UPLOAD_DIR=/data/uploads
 
 RUN addgroup -S -g 1001 nodejs && adduser -S -u 1001 -G nodejs nextjs \

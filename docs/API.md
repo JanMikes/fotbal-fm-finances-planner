@@ -7,6 +7,18 @@ transactions). Shapes are the TypeScript types in `src/lib/types.ts`; the typed 
 
 - **Auth:** every endpoint except `GET /api/health` and `POST /api/auth/login` requires the `fmp_session` cookie.
   Without it the API answers `401 {"error":"unauthorized","message":"Přihlaste se."}` (pages redirect to `/login`).
+- **Same-origin (CSRF):** every non-GET/HEAD/OPTIONS `/api/*` request (including `/api/auth/login`) must come from
+  the app's own origin: `Sec-Fetch-Site` must be `same-origin`/`none` when present, otherwise `Origin` must equal
+  the public origin (scheme + host, honouring `X-Forwarded-Proto`/`X-Forwarded-Host` from Traefik). Requests with
+  neither header (non-browser clients such as curl/Playwright `request`) pass — they still need the cookie.
+  Violations → `403 {"error":"forbidden","message":"Požadavek z cizího webu byl zablokován."}`
+  (`src/server/auth/csrf.ts`). Reason: the cookie is `SameSite=Lax`, which treats every `*.thedevs.cz` app as same-site.
+- **JSON bodies** must be sent with `Content-Type: application/json` (parameters such as `; charset=utf-8` are fine);
+  any other type with a non-empty body → `415`. An empty body (e.g. `POST …/close`) is treated as `{}`.
+  Bodies over 256 KB → `413`. The only multipart endpoint is the file upload.
+- **PATCH/PUT are partial:** only the fields present in the body change; absent fields keep their stored value
+  (send only the fields the user changed, so concurrent edits of other fields are not reverted). `null` clears a
+  nullable field.
 - **Keys are camelCase.** Request bodies may also use snake_case top-level keys (`parent_id`, `before_id`, …) —
   they are converted.
 - **IDs** are UUIDs. Create endpoints accept an optional client-generated `id` (uuid v4) so optimistic entities
@@ -15,9 +27,13 @@ transactions). Shapes are the TypeScript types in `src/lib/types.ts`; the typed 
   realtime events so the originating tab can ignore its own changes.
 - **Money / quantities** are integers (Kč, ks). Inputs accept numbers or free text — every non-digit is stripped
   (`"4 500 Kč"` → 4500, `""` → `null`), exactly like the prototype.
-- **Dates:** `"YYYY-MM-DD"`. Timestamps: ISO 8601 strings.
+- **Dates:** `"YYYY-MM-DD"` with a year between **2000 and 2100** (else `400`, message „Datum musí být mezi roky
+  2000 a 2100."). Same range for `installmentFrom` and the `:year` path parameter. Timestamps: ISO 8601 strings.
+  "Current year/month" on the server is computed in **Europe/Prague** (`src/server/time.ts`).
 - **Text** is trimmed; required text must be non-empty after trimming.
-- **Errors:** `{ "error": code, "message": "Czech text", "details"?: … }`
+- **Errors:** always JSON `{ "error": code, "message": "Czech text", "details"?: … }` — show `message` to the user;
+  `error` is a stable machine code. Stack traces are never returned (unexpected errors are logged and answered with
+  `500 internal` „Interní chyba serveru.").
 
 | Status | `error` | When |
 |---|---|---|
@@ -25,27 +41,34 @@ transactions). Shapes are the TypeScript types in `src/lib/types.ts`; the typed 
 | 400 | `bad_request` | integrity rule violated (message is user-facing Czech, e.g. „Musí zůstat alespoň jeden sloupec.") |
 | 400 | `bad_reference` | referenced row does not exist |
 | 401 | `unauthorized` | no / invalid session |
+| 403 | `forbidden` | cross-origin unsafe request (CSRF protection) |
 | 404 | `not_found` | unknown id (also for malformed ids in the path) |
-| 409 | `conflict` | unique violation (duplicate print-type name, duplicate client id) |
-| 413 | `too_large` | attachment > 25 MB |
+| 409 | `conflict` | unique violation (duplicate print-type name, duplicate client id); concurrent-change deadlock („Souběžná změna — zkuste to prosím znovu.") |
+| 413 | `too_large` | attachment > 25 MB („Soubor je příliš velký (max. 25 MB).") or JSON body > 256 KB |
+| 415 | `unsupported_media_type` | non-JSON body on a JSON endpoint |
 | 429 | `rate_limited` | too many login attempts |
 | 500 | `internal` | unexpected |
 
 - **Ordering:** `sortOrder` (number). Moves insert at the midpoint between neighbours; when the gap gets below
   `1e-6` the whole sibling group is renumbered `1..n` (same algorithm client-side: `src/lib/sortOrder.ts`).
   Lists are always displayed sorted by `sortOrder`.
+  Ordering-affecting writes are serialised per container (task-board column list, each column's items, print
+  types, org tree) with transaction-scoped advisory locks (`lockContainers` in `src/server/services/ordering.ts`),
+  so parallel creates / moves / deletes / duplicates never produce duplicate `sortOrder`s.
 
 ## Auth & health
 
 | Method | Path | Body | Response |
 |---|---|---|---|
-| GET | `/api/health` | – | `200 {"ok":true}` when `select 1` succeeds within 3 s, else `503 {"ok":false,…}`. No auth. |
-| GET | `/k/:token` | – | Valid `APP_ACCESS_TOKEN` → sets cookie, `303 Location: /`. Invalid → `303 Location: /login`. |
-| POST | `/api/auth/login` | form `password=…` **or** JSON `{password}` | Form: `303` to `/` (cookie set) / `/login?error=1` / `/login?error=rate`. JSON: `200 {ok:true}` / `401` / `429`. 10 attempts per 15 min per IP. |
+| GET | `/api/health` | – | `200 {"ok":true,"db":"ok","realtime":"listening"\|"connecting"}` when `select 1` succeeds within 3 s. `503 {"ok":false,"db":"down",…}` when the DB does not answer, and `503 {"ok":false,"db":"ok","realtime":"down",…}` when this instance's realtime LISTEN connection has been down for more than 30 s. No auth. |
+| GET | `/k/:token` | – | Valid `APP_ACCESS_TOKEN` → sets cookie, `303 Location: /`. Invalid → `303 Location: /login`. Shares the login rate limiter: over the limit → `303 Location: /login?error=rate` (even with the right token). `Referrer-Policy: no-referrer`. |
+| POST | `/api/auth/login` | form `password=…` **or** JSON `{password}` | Form: `303` to `/` (cookie set) / `/login?error=1` / `/login?error=rate`. JSON: `200 {ok:true}` / `401` / `429`. 10 attempts per 15 min per client IP, shared with `/k/:token` (IP = right-most `X-Forwarded-For` entry, i.e. the one Traefik appended). |
 | POST | `/api/auth/logout` | – | Clears cookie, `303 Location: /login` |
 
 Cookie: `fmp_session=v1.<issuedAtMs>.<HMAC-SHA256>`; `HttpOnly; SameSite=Lax; Max-Age=31536000; Path=/`,
-`Secure` only when the request is HTTPS (directly or `X-Forwarded-Proto: https`).
+`Secure` only when the request is HTTPS (directly or `X-Forwarded-Proto: https`). The HMAC key is
+`SESSION_SECRET + "." + base64url(SHA-256(APP_PASSWORD + "\n" + APP_ACCESS_TOKEN))`, so rotating **any** of the three
+secrets invalidates all existing cookies.
 
 ## State
 
@@ -158,7 +181,7 @@ Archived and active items of the year are both included.
 | Method | Path | Body | Response / rules |
 |---|---|---|---|
 | GET | `/api/budget` | – | `Budget` |
-| PUT | `/api/budget` | any subset; `installmentFrom` accepts `"YYYY-MM"` or `"YYYY-MM-DD"` (stored as the 1st) or `null` | `Budget`. When a non-zero installment is saved while `installmentFrom` is null (and none is sent), it is set to the current month (Europe/Prague). The migration seeds 0 / 0 / 7500 from the go-live month. |
+| PUT | `/api/budget` | any subset; `installmentFrom` accepts `"YYYY-MM"` or `"YYYY-MM-DD"` (stored as the 1st) or `null` | `Budget`. Only the sent fields change. `installmentFrom: null` = no installment deducted yet. When the request **contains** a non-zero `monthlyInstallment` while the stored `installmentFrom` is null and the request does not send `installmentFrom`, it is set to the current month (Europe/Prague). Saving other fields never sets it; an explicitly sent `installmentFrom` (month or null) always wins. Fresh install: 0 / 0 / 7500 with `installmentFrom: null` (no day-one deduction; migration 0002 also clears the seeded month on an untouched budget). |
 
 `Zbývá = spolek + asAmount − Σ budget(persons with budgetColor "green") − monthlyInstallment × months(installmentFrom..now, inclusive)`
 — `computeBudget()` in `src/lib/budget.ts`.
@@ -170,10 +193,14 @@ The parent must already exist (create the task/item first, then upload).
 
 | Method | Path | Body | Response / rules |
 |---|---|---|---|
-| POST | `/api/attachments` | `multipart/form-data`: `parentKind`, `parentId`, `file`, optional `id` | `201 Attachment` (`url` = `/api/attachments/:id/file`). Max 25 MB (`413`). One file per request. |
-| POST | `/api/attachments` | JSON `{kind: "link", parentKind, parentId, url, name?, id?}` | `201 Attachment`. `https://` is prepended when the URL has no scheme; `javascript:`/`data:` rejected. |
+| POST | `/api/attachments` | `multipart/form-data`: `parentKind`, `parentId`, `file`, optional `id` | `201 Attachment` (`url` = `/api/attachments/:id/file`). Max 25 MB = 26 214 400 bytes (`413` „Soubor je příliš velký (max. 25 MB)."). One file per request; the body is streamed to disk (checked early via `Content-Length` and by a streaming byte cap). Filenames are read as UTF-8. This exact path bypasses the Next proxy (no in-memory body buffering) and checks session + same-origin itself. |
+| POST | `/api/attachments` | JSON `{kind: "link", parentKind, parentId, url, name?, id?}` | `201 Attachment`. `https://` is prepended when the URL has no scheme; only `http:`, `https:` and `mailto:` are accepted (anything else → `400`). |
 | GET | `/api/attachments/:id/file` | – | The file. `Content-Type` = stored mime, `Content-Disposition: inline` for images / PDF / text, else `attachment`, with an RFC 5987 UTF-8 filename. `X-Content-Type-Options: nosniff` + sandbox CSP. |
 | DELETE | `/api/attachments/:id` | – | `{ok:true}`; the file is removed from disk. |
+
+Files never outlive their rows: deleting a task / print item removes its files after commit (and waits for an
+in-flight upload to that parent, so the upload is deleted too or fails with 400); a duplicate whose transaction
+fails unlinks the files it already copied; a failed upload removes its partial file.
 
 ## Realtime (`GET /api/realtime`)
 
@@ -181,6 +208,7 @@ Server-Sent Events (`text/event-stream`, `Cache-Control: no-cache, no-transform`
 
 ```
 retry: 3000
+
 event: hello
 data: {"ok":true}
 
@@ -199,5 +227,11 @@ data: {}
 - One event per committed mutation (sent via `pg_notify` inside the transaction, so it only arrives after commit),
   from **any** app instance (blue-green safe). Bulk side effects (e.g. tasks moved by a column delete) are not
   sent separately — **refetch `/api/state`** on any event not carrying your own `clientId`.
-- `resync`: the server re-established its LISTEN connection and may have missed events → refetch.
-- Clients must also refetch after reconnecting. On SIGTERM the server closes all streams immediately.
+- **Handshake:** `hello` is sent only once this server process is `LISTEN`ing on Postgres (the stream stays open with
+  heartbeats until then). So every change committed after the client received `hello` will be delivered.
+  **Clients must refetch `/api/state` on every `hello`** (the first one included — it closes the gap between the
+  initial snapshot and the live subscription) **and on every `resync`**.
+- `resync`: the server's LISTEN connection was lost and has been re-established (reconnect with exponential backoff,
+  liveness-probed every 30 s); events may have been missed → refetch. Event names `hello` / `change` / `resync` are
+  a stable contract.
+- On SIGTERM the server closes all streams immediately; clients reconnect (and get a new `hello`).

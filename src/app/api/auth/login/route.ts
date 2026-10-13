@@ -1,12 +1,12 @@
 import { clientIp, loginLimiter } from "@/server/auth/rateLimit";
-import { createSessionValue, isSecureRequest, secretEquals, sessionCookieHeader } from "@/server/auth/session";
+import { isSecureRequest, issueSession, secretEquals, sessionCookieHeader } from "@/server/auth/session";
 import { env } from "@/server/env";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Password login. Accepts an HTML form post (application/x-www-form-urlencoded / multipart → 303 redirects)
+ * Password login (same-origin is enforced by src/proxy.ts for every unsafe /api/* request, this one included). Accepts an HTML form post (application/x-www-form-urlencoded / multipart → 303 redirects)
  * or JSON {password} (→ JSON response).
  */
 export async function POST(req: Request) {
@@ -34,6 +34,6 @@ export async function POST(req: Request) {
     return reply(401, "/login?error=1", { error: "invalid_password", message: "Nesprávné heslo" });
   }
   loginLimiter.reset(ip);
-  const cookie = sessionCookieHeader(await createSessionValue(env.sessionSecret), isSecureRequest(req));
+  const cookie = sessionCookieHeader(await issueSession(), isSecureRequest(req));
   return reply(200, "/", { ok: true }, cookie);
 }

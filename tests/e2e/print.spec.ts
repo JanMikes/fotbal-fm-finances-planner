@@ -103,7 +103,7 @@ test("create item with price → column sum and „Celkem“; paid / owed / none
   await expect(page.locator("#ptot")).toHaveText("5 000 Kč");
 
   // month filter by realisation date: label „Celkem za Listopad 2026", option carries the Kč sum
-  await expect(page.locator("#pmon option[value='2026-11']")).toHaveText(/^Listopad 2026 · [\d ]+ Kč$/);
+  await expect(page.locator("#pmon option[value='2026-11']")).toHaveText(/^Listopad 2026 · [\d\s]+\sKč$/);
   await page.locator("#pmon").selectOption("2026-11");
   await expect(page.locator("#ptotL")).toHaveText("Celkem za Listopad 2026");
   await expect(page.locator("#board .card h3")).toHaveText([`${TAG} Letáky`]);

@@ -1,6 +1,14 @@
 /**
  * One shared Postgres LISTEN connection per process, fanned out to all SSE subscribers.
- * Reconnects with backoff; on reconnect subscribers get a synthetic "resync" event so clients refetch.
+ *
+ * Handshake contract (docs/API.md "Realtime"): a subscriber only gets `hello` once this process is LISTENing, so
+ * every change committed after the client's `hello` is guaranteed to reach it. Whenever the LISTEN connection is
+ * (re-)established, every subscriber gets a synthetic "resync" (the SSE route turns it into `hello` for streams that
+ * have not had one yet, `resync` otherwise) so clients refetch whatever they may have missed.
+ *
+ * The connection is kept up for the whole process lifetime once started (also with zero subscribers) so
+ * /api/health can report it; it reconnects with exponential backoff and is probed with `SELECT 1` every 30 s to
+ * detect half-open TCP connections.
  */
 import pg from "pg";
 import { env } from "../env";
@@ -13,14 +21,21 @@ export interface Subscriber {
   close: () => void;
 }
 
+export const RESYNC = "resync";
+const PROBE_INTERVAL_MS = 30_000;
+const PROBE_TIMEOUT_MS = 10_000;
+
 interface BusState {
   client: pg.Client | null;
   connecting: Promise<void> | null;
   subscribers: Set<Subscriber>;
   retry: number;
   retryTimer: ReturnType<typeof setTimeout> | null;
+  probeTimer: ReturnType<typeof setInterval> | null;
   shuttingDown: boolean;
-  hadConnection: boolean;
+  started: boolean;
+  /** ms timestamp since when LISTEN has been down (null while listening, or before the first start). */
+  downSince: number | null;
 }
 
 const g = globalThis as typeof globalThis & { __fmpBus?: BusState };
@@ -30,8 +45,10 @@ const state: BusState = (g.__fmpBus ??= {
   subscribers: new Set(),
   retry: 0,
   retryTimer: null,
+  probeTimer: null,
   shuttingDown: false,
-  hadConnection: false,
+  started: false,
+  downSince: null,
 });
 
 function broadcast(payload: string) {
@@ -45,44 +62,92 @@ function broadcast(payload: string) {
 }
 
 function scheduleReconnect() {
-  if (state.shuttingDown || state.retryTimer || state.subscribers.size === 0) return;
+  if (state.shuttingDown || state.retryTimer) return;
   const delay = Math.min(30_000, 500 * 2 ** state.retry++);
   state.retryTimer = setTimeout(() => {
     state.retryTimer = null;
     void ensureListening();
   }, delay);
+  state.retryTimer.unref?.();
+}
+
+function stopProbe() {
+  if (state.probeTimer) clearInterval(state.probeTimer);
+  state.probeTimer = null;
+}
+
+function markLost(client: pg.Client, err?: unknown) {
+  if (state.client !== client) return;
+  if (err) console.error("[realtime] LISTEN connection lost", (err as Error)?.message ?? err);
+  state.client = null;
+  state.downSince ??= Date.now();
+  stopProbe();
+  client.removeAllListeners();
+  client.on("error", () => undefined); // swallow late socket errors after removal
+  client.end().catch(() => undefined);
+  scheduleReconnect();
+}
+
+function startProbe(client: pg.Client) {
+  stopProbe();
+  state.probeTimer = setInterval(() => {
+    if (state.client !== client) return stopProbe();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("LISTEN probe timeout")), PROBE_TIMEOUT_MS);
+    });
+    Promise.race([client.query("select 1"), timeout])
+      .catch((err) => markLost(client, err))
+      .finally(() => clearTimeout(timer));
+  }, PROBE_INTERVAL_MS);
+  state.probeTimer.unref?.();
 }
 
 async function connect(): Promise<void> {
-  const client = new pg.Client({ connectionString: env.databaseUrl, keepAlive: true });
+  const client = new pg.Client({
+    connectionString: env.databaseUrl,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10_000,
+    connectionTimeoutMillis: 10_000,
+  });
   client.on("notification", (msg) => {
     if (msg.channel === CHANNEL && msg.payload) broadcast(msg.payload);
   });
-  const onLost = (err?: unknown) => {
-    if (state.client !== client) return;
-    if (err) console.error("[realtime] LISTEN connection lost", err);
-    state.client = null;
+  try {
+    client.on("error", (err) => markLost(client, err));
+    client.on("end", () => markLost(client));
+    await client.connect();
+    await client.query(`LISTEN ${CHANNEL}`);
+  } catch (err) {
     client.removeAllListeners();
-    client.end().catch(() => undefined);
-    scheduleReconnect();
-  };
-  client.on("error", onLost);
-  client.on("end", () => onLost());
-  await client.connect();
-  await client.query(`LISTEN ${CHANNEL}`);
+    client.on("error", () => undefined);
+    await client.end().catch(() => undefined);
+    throw err;
+  }
+  if (state.shuttingDown) {
+    await client.end().catch(() => undefined);
+    return;
+  }
   state.client = client;
   state.retry = 0;
-  if (state.hadConnection) broadcast("resync"); // events may have been missed while disconnected
-  state.hadConnection = true;
+  state.downSince = null;
+  startProbe(client);
+  // Every (re)connect: streams waiting for their handshake get `hello`, the others `resync` (refetch).
+  broadcast(RESYNC);
 }
 
-/** Ensure the shared LISTEN connection is up (idempotent). */
+/** Ensure the shared LISTEN connection is up (idempotent). Resolves when it is up OR the attempt failed. */
 export async function ensureListening(): Promise<void> {
-  if (state.client || state.shuttingDown) return;
+  if (state.shuttingDown) return;
+  if (!state.started) {
+    state.started = true;
+    state.downSince ??= Date.now();
+  }
+  if (state.client) return;
   if (!state.connecting) {
     state.connecting = connect()
       .catch((err) => {
-        console.error("[realtime] LISTEN connect failed", err);
+        console.error("[realtime] LISTEN connect failed", (err as Error)?.message ?? err);
         scheduleReconnect();
       })
       .finally(() => {
@@ -90,6 +155,20 @@ export async function ensureListening(): Promise<void> {
       });
   }
   await state.connecting;
+}
+
+/** Whether this process currently has a working LISTEN connection. */
+export function isListening(): boolean {
+  return state.client !== null;
+}
+
+/** LISTEN status for /api/health. */
+export function realtimeStatus(now: number = Date.now()): { listening: boolean; started: boolean; downForMs: number | null } {
+  return {
+    listening: state.client !== null,
+    started: state.started,
+    downForMs: state.client || state.downSince === null ? null : now - state.downSince,
+  };
 }
 
 export function subscribe(sub: Subscriber): () => void {
@@ -108,6 +187,8 @@ export function subscriberCount(): number {
 export async function shutdownRealtime(): Promise<void> {
   state.shuttingDown = true;
   if (state.retryTimer) clearTimeout(state.retryTimer);
+  state.retryTimer = null;
+  stopProbe();
   for (const s of [...state.subscribers]) {
     try {
       s.close();
@@ -120,6 +201,7 @@ export async function shutdownRealtime(): Promise<void> {
   state.client = null;
   if (c) {
     c.removeAllListeners();
+    c.on("error", () => undefined);
     await c.end().catch(() => undefined);
   }
 }
@@ -127,8 +209,14 @@ export async function shutdownRealtime(): Promise<void> {
 /** Reset after shutdown (tests only). */
 export function __resetRealtimeForTests() {
   state.shuttingDown = false;
-  state.hadConnection = false;
+  state.started = false;
+  state.downSince = null;
   state.retry = 0;
+}
+
+/** Tests only: simulate a lost LISTEN connection (as if the DB dropped it). */
+export function __dropListenConnectionForTests() {
+  if (state.client) markLost(state.client, new Error("test drop"));
 }
 
 let handlersInstalled = false;

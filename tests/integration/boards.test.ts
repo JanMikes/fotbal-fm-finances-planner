@@ -24,7 +24,7 @@ describe("state", () => {
     expect(printCols(s).map((c) => c.title)).toEqual(["Poptávka", "Ve výrobě", "Hotovo"]);
     expect(s.printTypes.map((t) => t.name)).toEqual(["Letáky", "Vizitky", "Plakáty", "Bannery", "Roll-upy", "Samolepky", "Brožury"]);
     expect(s.budget).toMatchObject({ spolek: 0, asAmount: 0, monthlyInstallment: 7500 });
-    expect(s.budget.installmentFrom).toMatch(/^\d{4}-\d{2}-01$/);
+    expect(s.budget.installmentFrom).toBeNull(); // no deduction until a non-zero installment is saved
     expect(s.nodes).toEqual([]);
     expect(s.tasks).toEqual([]);
   });

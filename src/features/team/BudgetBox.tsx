@@ -13,6 +13,8 @@ export function BudgetBox() {
   const [prefs, updatePrefs] = usePrefs();
   const [draft, setDraft] = useState<BudgetDraft>({});
   const timers = useRef<Partial<Record<BudgetField, ReturnType<typeof setTimeout>>>>({});
+  /** Typed values not sent yet (300 ms debounce) — flushed on blur, unmount and `pagehide`. */
+  const unsent = useRef<BudgetDraft>({});
   const budgetRef = useRef(state.budget);
   useEffect(() => {
     budgetRef.current = state.budget;
@@ -21,21 +23,27 @@ export function BudgetBox() {
   const open = prefs.curBudOpen;
   const view = budgetView(applyDraft(state.budget, draft), state.nodes);
 
-  const flush = (field: BudgetField, text: string) => {
+  const flush = (field: BudgetField, text: string, keepalive = false) => {
     clearTimeout(timers.current[field]);
     delete timers.current[field];
-    void actions.updateBudget(budgetPatch(field, text, budgetRef.current)).catch(() => {});
+    delete unsent.current[field];
+    void actions.updateBudget(budgetPatch(field, text, budgetRef.current), { keepalive }).catch(() => {});
   };
+  const flushRef = useRef(flush);
+  useEffect(() => {
+    flushRef.current = flush;
+  });
 
   const onInput = (field: BudgetField, text: string) => {
     setDraft((d) => ({ ...d, [field]: text }));
+    unsent.current[field] = text;
     clearTimeout(timers.current[field]);
     timers.current[field] = setTimeout(() => flush(field, text), SAVE_DELAY);
   };
 
   const onBlur = (field: BudgetField) => {
-    const text = draft[field];
-    if (text !== undefined && timers.current[field]) flush(field, text);
+    const text = unsent.current[field];
+    if (text !== undefined) flush(field, text);
     // re-render formatted from the stored value (formatting on blur only)
     setDraft((d) => {
       const n = { ...d };
@@ -44,10 +52,19 @@ export function BudgetBox() {
     });
   };
 
+  // never drop a typed value: send pending edits when the box unmounts (tab switch) or the page is hidden/closed
   useEffect(() => {
-    const t = timers.current;
+    const flushAll = (keepalive: boolean) => {
+      for (const k of Object.keys(unsent.current) as BudgetField[]) {
+        const text = unsent.current[k];
+        if (text !== undefined) flushRef.current(k, text, keepalive);
+      }
+    };
+    const onPageHide = () => flushAll(true);
+    window.addEventListener("pagehide", onPageHide);
     return () => {
-      for (const k of Object.keys(t) as BudgetField[]) clearTimeout(t[k]);
+      window.removeEventListener("pagehide", onPageHide);
+      flushAll(false);
     };
   }, []);
 

@@ -9,7 +9,8 @@ Single source of truth for all implementation agents. Inputs: `prompt.md` (spec,
 - **Access:** no user accounts. Two ways in, both set the same long-lived (1 year) signed httpOnly cookie:
   1. **Magic link** `https://<domain>/k/<APP_ACCESS_TOKEN>` → sets cookie, redirects to `/` (token stripped from URL).
   2. **Password page** `/login` with one shared team password `APP_PASSWORD`.
-  Cookie signed with `SESSION_SECRET` (HMAC). Rotating `SESSION_SECRET` logs everyone out.
+  Cookie signed with a key derived from `SESSION_SECRET` + hash(`APP_PASSWORD` + `APP_ACCESS_TOKEN`) (HMAC),
+  so rotating any of the three logs everyone out.
   All values come from env (Infisical on lily). **The real password/token must never appear in the repo** —
   `compose.yml` uses dev defaults (`dev-password`, `dev-token`, `dev-session-secret-…`).
   "Přihlášen: [jméno]" remains an identity choice stored in localStorage (not auth).

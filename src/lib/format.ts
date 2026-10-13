@@ -1,19 +1,27 @@
 /** Formatting / parsing helpers ported from the prototype (prototype.md §5). Pure, locale cs-CZ. */
 import { MNAMES } from "./constants";
 
-/** cs-CZ number with thousands separated by a normal space (prototype replaces NBSP; newer ICU may emit U+202F). */
+/** Non-breaking space: thousands separator and number–unit gap, so „15 000 Kč" never wraps. */
+export const NBSP = "\u00a0";
+
+/** cs-CZ number with thousands separated by U+00A0 (ICU may emit U+00A0 or U+202F; both are normalised). */
 export function nf(n: number): string {
-  return n.toLocaleString("cs-CZ").replace(/[  ]/g, " ");
+  return n.toLocaleString("cs-CZ").replace(/[\u00a0\u202f ]/g, NBSP);
 }
 
-/** `25 000 Kč`, `0 Kč` (prototype `kcs`). */
+/** `25 000 Kč`, `0 Kč` (prototype `kcs`), non-breaking. */
 export function kcs(n: number | null | undefined): string {
-  return nf(n || 0) + " Kč";
+  return nf(n || 0) + NBSP + "Kč";
 }
 
-/** Strip every non-digit and parse (prototype `replace(/\D/g,'')`). Returns null when there are no digits. */
+/**
+ * Parse a typed whole number: a trailing decimal part (`,` or `.` + 1–2 digits, e.g. „4 500,50 Kč") is ignored,
+ * then every non-digit is stripped (prototype `replace(/\D/g,'')`). Returns null when there are no digits.
+ */
 export function parseDigits(v: string | number | null | undefined): number | null {
-  const digits = String(v ?? "").replace(/\D/g, "");
+  const digits = String(v ?? "")
+    .replace(/[.,]\d{1,2}(?=\D*$)/, "")
+    .replace(/\D/g, "");
   if (!digits) return null;
   const n = Number(digits);
   return Number.isSafeInteger(n) ? n : null;
@@ -31,12 +39,7 @@ export function cbFmt(n: number | null | undefined): string {
 
 /** Signed Kč used in the budget box: U+2212 minus for negatives (prototype `k`). */
 export function signedKc(n: number): string {
-  return (n < 0 ? "−" : "") + (Math.abs(n) ? cbFmt(Math.abs(n)) : "0") + " Kč";
-}
-
-/** Member budget tag text; empty string when there is no budget. */
-export function budgetTag(budget: number | null | undefined): string {
-  return budget ? kcs(budget) : "";
+  return (n < 0 ? "−" : "") + (Math.abs(n) ? cbFmt(Math.abs(n)) : "0") + NBSP + "Kč";
 }
 
 /** File size label: `1,5 MB` / `12 kB` (prototype `fmtSize`). */
@@ -61,12 +64,12 @@ export function ini(name: string): string {
 
 /** Chart value label: 4500 → `4,5 tis.`, 12000 → `12 tis.` */
 export function thousandsLabel(s: number): string {
-  return nf(Math.round(s / 100) / 10).replace(",0", "") + " tis.";
+  return nf(Math.round(s / 100) / 10).replace(",0", "") + NBSP + "tis.";
 }
 
 /** Quantity chip: `500 ks`. */
 export function qtyLabel(q: number | null | undefined): string {
-  return nf(q || 0) + " ks";
+  return nf(q || 0) + NBSP + "ks";
 }
 
 /** Parse "YYYY-MM-DD" as a LOCAL date (midnight). */
@@ -93,20 +96,15 @@ export function monthKey(d: Date): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
 }
 
-/** "YYYY-MM-DD" of a local date. */
-export function isoDate(d: Date): string {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-}
-
 /** `Říjen 2026` from "2026-10" (prototype `monLab`). */
 export function monLab(m: string): string {
   const [y, mo] = m.split("-");
   return MNAMES[Number(mo) - 1] + " " + y;
 }
 
-/** Link URL normalisation: trim, prepend https:// when there is no scheme (prototype `addLink`). */
+/** Link URL normalisation: trim, prepend https:// when there is no scheme (prototype `addLink`); `mailto:` is kept. */
 export function normalizeUrl(raw: string): string {
   const u = raw.trim();
   if (!u) return "";
-  return /^[a-z]+:\/\//i.test(u) ? u : "https://" + u;
+  return /^([a-z][a-z0-9+.-]*:\/\/|mailto:)/i.test(u) ? u : "https://" + u;
 }

@@ -1,7 +1,8 @@
 /**
  * SSE subscription to /api/realtime with reconnect + exponential backoff (1 s → 30 s).
- * Own events (same X-Client-Id) are ignored; every other event schedules a refetch. Every (re)connect after the
- * first triggers a full refetch (events may have been missed).
+ * Own events (same X-Client-Id) are ignored; every other event schedules a refetch. The server sends `hello` once its
+ * LISTEN is live and `resync` after LISTEN reconnects — both (including the very first `hello`) trigger a full refetch,
+ * so changes committed between the initial /api/state snapshot and the live subscription are never lost.
  */
 import { CLIENT_ID } from "../api";
 import type { ChangeEvent } from "../types";
@@ -18,7 +19,6 @@ export function connectRealtime(store: AppStore, opts: RealtimeOptions = {}): ()
   let attempt = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let stopped = false;
-  let connectedOnce = false;
 
   const open = () => {
     if (stopped) return;
@@ -26,8 +26,7 @@ export function connectRealtime(store: AppStore, opts: RealtimeOptions = {}): ()
     es.addEventListener("hello", () => {
       attempt = 0;
       store.setOnline(true);
-      if (connectedOnce) store.scheduleRefetch(0);
-      connectedOnce = true;
+      store.scheduleRefetch(0);
     });
     es.addEventListener("change", (msg) => {
       let ev: ChangeEvent;

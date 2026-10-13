@@ -83,7 +83,12 @@ function IdentitySelect() {
   return (
     <label className="who">
       <span>Přihlášen</span>
-      <select id="me" value={prefs.me ?? ""} onChange={(e) => updatePrefs({ me: e.target.value || null })}>
+      <select
+        id="me"
+        value={prefs.me ?? ""}
+        title={persons.length === 0 ? "Zatím nejsou žádní členové — přidejte je ve Struktuře týmu." : undefined}
+        onChange={(e) => updatePrefs({ me: e.target.value || null })}
+      >
         {persons.length === 0 && <option value="">—</option>}
         {persons.map((p) => (
           <option key={p.id} value={p.id}>

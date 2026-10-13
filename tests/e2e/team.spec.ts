@@ -365,14 +365,14 @@ test.describe("Struktura týmu", () => {
     await expect(page.locator("#cbSum")).toHaveText("120 000 Kč");
     await expect(page.locator("#cbGreen")).toHaveText("− " + fmt(green));
     await expect(page.locator("#cbLeft")).toHaveText(fmt(left));
-    await expect(page.locator("#cbPay")).toHaveValue("5 000");
+    await expect(page.locator("#cbPay")).toHaveValue("5\u00a0000"); // non-breaking thousands separator
     await expect(page.locator("#cbFrom")).toHaveValue(from);
 
     // any text accepted, digits stored; formatted on blur
     await page.locator("#cbSpolek").fill("abc 50 000 Kč");
     await expect(page.locator("#cbSum")).toHaveText("70 000 Kč");
     await page.locator("#cbAS").focus();
-    await expect(page.locator("#cbSpolek")).toHaveValue("50 000");
+    await expect(page.locator("#cbSpolek")).toHaveValue("50\u00a0000");
     await expect.poll(async () => (await state(req)).budget.spolek).toBe(50000);
 
     // overspent → red with minus
@@ -417,5 +417,55 @@ test.describe("Struktura týmu", () => {
     await cleanup(page.request, [n.id]);
     await expect(card(p2, name)).toHaveCount(0, { timeout: 10_000 });
     await other.close();
+  });
+
+  test("member / unit modal closes when the node is deleted by someone else", async ({ page }) => {
+    const req = page.request;
+    const m = await createNode(req, { kind: "person", name: `Gone ${sfx()}` });
+    const u = await createNode(req, { kind: "unit", name: `Gone ${sfx()}` });
+    await openTeam(page);
+    await page.locator(`#tree .onode[data-uid="${m.id}"]`).click();
+    await expect(page.getByTestId("member-modal")).toBeVisible();
+    await req.delete(`/api/org-nodes/${m.id}`);
+    await expect(page.getByTestId("member-modal")).toHaveCount(0);
+    await expect(page.locator(".app-toast")).toHaveText("Položka byla smazána jiným uživatelem.");
+    await expect(page.locator(".mh h2")).toHaveCount(0); // did not turn into „Nový člen"
+    await page.locator(`#tree .onode[data-uid="${u.id}"]`).click();
+    await expect(page.getByTestId("unit-modal")).toBeVisible();
+    await req.delete(`/api/org-nodes/${u.id}`);
+    await expect(page.getByTestId("unit-modal")).toHaveCount(0);
+    await expect(page.locator(".mh h2")).toHaveCount(0); // did not turn into „Nová kategorie"
+  });
+
+  test.describe("mobile", () => {
+    test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+
+    test("tree autoscrolls at the bottom edge during a touch drag; touchcancel reverts", async ({ page }) => {
+      const ids: string[] = [];
+      for (let i = 0; i < 8; i++) ids.push((await createNode(page.request, { kind: "person", name: `Org ${i} ${sfx()}` })).id);
+      await openTeam(page);
+      const org = page.locator("#org");
+      const first = page.locator(`#tree .onode[data-uid="${ids[0]}"]`);
+      await first.scrollIntoViewIfNeeded();
+      const start = await org.evaluate((el) => el.scrollTop);
+      const b = (await first.boundingBox())!;
+      const x = b.x + b.width / 2;
+      const y = b.y + b.height / 2;
+      const cdp = await page.context().newCDPSession(page);
+      const pt = (py: number) => [{ x, y: py, id: 1, radiusX: 2, radiusY: 2, force: 1 }];
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: pt(y) });
+      await page.waitForTimeout(320);
+      await expect(page.locator(".onode.ghost")).toHaveCount(1);
+      for (let i = 1; i <= 8; i++) {
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: pt(y + ((844 - 20 - y) * i) / 8) });
+        await page.waitForTimeout(16);
+      }
+      await expect.poll(() => org.evaluate((el) => el.scrollTop), { timeout: 3000 }).toBeGreaterThan(start + 100);
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchCancel", touchPoints: [] });
+      await cdp.detach();
+      await expect(page.locator(".onode.ghost")).toHaveCount(0);
+      const s = await state(page.request);
+      expect(ids.map((id) => s.nodes.find((n) => n.id === id)?.parentId ?? null)).toEqual(ids.map(() => null)); // nothing moved
+    });
   });
 });

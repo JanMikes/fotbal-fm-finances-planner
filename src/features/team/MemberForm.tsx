@@ -1,29 +1,67 @@
 "use client";
 /** Member form „Člen týmu" / „Nový člen" (prototype §10.10). */
 import { useEffect, useRef, useState } from "react";
-import type { NodeInput } from "@/lib/api";
+import { Modal } from "@/components/ui/Modal";
+import { useCloseWhenDeleted } from "@/components/ui/useCloseWhenDeleted";
 import { AREAS, AVPAL, BUDGET_COLORS } from "@/lib/constants";
 import { nf, parseDigits } from "@/lib/format";
+import { changedFields, isEmptyPatch } from "@/lib/patch";
 import { useActions, useAppState, usePrefs } from "@/lib/store/react";
 import { assignedTaskCount, colorOf, parentOptions } from "@/lib/tree";
 import type { BudgetColor } from "@/lib/types";
 import { ParentSelect } from "./ParentSelect";
-import { TeamModal } from "./TeamModal";
+
+interface FormValues {
+  name: string;
+  role: string;
+  info: string;
+  budget: string;
+  color: string;
+  budColor: BudgetColor;
+  parent: string;
+  areas: string[];
+}
+
+/** Form values → API fields (shared by the save payload and the „unchanged" baseline). */
+function toFields(v: FormValues) {
+  return {
+    name: v.name.trim(),
+    role: v.role.trim() || null,
+    info: v.info.trim() || null,
+    budget: parseDigits(v.budget),
+    budgetColor: v.budColor,
+    avatarColor: v.color || null,
+    parentId: v.parent || null,
+    areas: AREAS.filter((a) => v.areas.includes(a)),
+  };
+}
 
 export function MemberForm({ id, parentId, onClose, onOpenMember }: { id: string | null; parentId: string | null; onClose: () => void; onOpenMember: (id: string) => void }) {
   const state = useAppState();
   const actions = useActions();
   const [prefs] = usePrefs();
   const ex = id ? state.nodes.find((n) => n.id === id && n.kind === "person") : undefined;
+  useCloseWhenDeleted(!!id && !ex, onClose);
 
-  const [name, setName] = useState(ex?.name ?? "");
-  const [role, setRole] = useState(ex?.role ?? "");
-  const [info, setInfo] = useState(ex?.info ?? "");
-  const [budget, setBudget] = useState(ex?.budget ? nf(ex.budget) : "");
-  const [color, setColor] = useState<string>(ex ? ex.avatarColor || colorOf(state.nodes, ex.id) : "");
-  const [budColor, setBudColor] = useState<BudgetColor>(ex?.budgetColor ?? "blue");
-  const [parent, setParent] = useState<string>(ex ? (ex.parentId ?? "") : (parentId ?? ""));
-  const [areas, setAreas] = useState<string[]>(ex?.areas ?? []);
+  // values when the form opened — the baseline for „send only what changed"
+  const [init] = useState<FormValues>(() => ({
+    name: ex?.name ?? "",
+    role: ex?.role ?? "",
+    info: ex?.info ?? "",
+    budget: ex?.budget ? nf(ex.budget) : "",
+    color: ex ? ex.avatarColor || colorOf(state.nodes, ex.id) : "",
+    budColor: ex?.budgetColor ?? "blue",
+    parent: ex ? (ex.parentId ?? "") : (parentId ?? ""),
+    areas: ex?.areas ?? [],
+  }));
+  const [name, setName] = useState(init.name);
+  const [role, setRole] = useState(init.role);
+  const [info, setInfo] = useState(init.info);
+  const [budget, setBudget] = useState(init.budget);
+  const [color, setColor] = useState<string>(init.color);
+  const [budColor, setBudColor] = useState<BudgetColor>(init.budColor);
+  const [parent, setParent] = useState<string>(init.parent);
+  const [areas, setAreas] = useState<string[]>(init.areas);
   const [nameErr, setNameErr] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
 
@@ -43,21 +81,12 @@ export function MemberForm({ id, parentId, onClose, onOpenMember }: { id: string
       nameRef.current?.focus();
       return;
     }
-    const fields = {
-      name: n,
-      role: role.trim() || null,
-      info: info.trim() || null,
-      budget: parseDigits(budget),
-      budgetColor: budColor,
-      avatarColor: color || ex?.avatarColor || null,
-      parentId: parent || null,
-      areas: AREAS.filter((a) => areas.includes(a)),
-    };
+    const fields = toFields({ name, role, info, budget, color, budColor, parent, areas });
     onClose();
     if (ex) {
-      const { parentId: newParent, ...rest } = fields;
-      const patch: NodeInput = (ex.parentId ?? null) === newParent ? rest : fields;
-      void actions.updateNode(ex.id, patch).catch(() => {});
+      // only the changed fields: a concurrent edit (or a move in the tree) by someone else is kept
+      const patch = changedFields(fields, toFields(init));
+      if (!isEmptyPatch(patch)) void actions.updateNode(ex.id, patch).catch(() => {});
     } else {
       void actions.createNode({ kind: "person", ...fields }).catch(() => {});
     }
@@ -83,10 +112,12 @@ export function MemberForm({ id, parentId, onClose, onOpenMember }: { id: string
   };
 
   return (
-    <TeamModal
+    <Modal
       title={ex ? "Člen týmu" : "Nový člen"}
       onClose={onClose}
-      footer={
+      portal
+      testId="member-modal"
+      foot={
         <>
           <span className="meta">{ex ? `${assignedTaskCount(ex.id, state.tasks)} přiřazených úkolů` : ""}</span>
           {ex && ex.id !== prefs.me && (
@@ -178,6 +209,6 @@ export function MemberForm({ id, parentId, onClose, onOpenMember }: { id: string
           </div>
         </div>
       </div>
-    </TeamModal>
+    </Modal>
   );
 }

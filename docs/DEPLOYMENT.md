@@ -67,7 +67,8 @@ lily: webhook receiver (non-root) verifies the HMAC and spools the job → root 
 - Listens on `0.0.0.0:3000` and starts with `node server.js` (Next.js standalone). Runs as uid **1001**,
   `WORKDIR /app`.
 - `node migrate.mjs` exists in `/app`, reads `DATABASE_URL`, is idempotent, and exits non-zero on failure.
-- `/api/health` answers **without auth**: 200 when the DB answers, 503 otherwise.
+- `/api/health` answers **without auth**: 200 when the DB answers, 503 otherwise — and also 503 when the
+  instance's realtime `LISTEN` connection has been down for more than 30 s (body field `realtime`).
 - **busybox `wget`** is in the image (the compose healthcheck uses
   `wget --spider http://127.0.0.1:3000/api/health`; use `127.0.0.1`, not `localhost`, because
   `localhost` resolves to IPv6 `::1`).
@@ -77,7 +78,21 @@ lily: webhook receiver (non-root) verifies the HMAC and spools the job → root 
 - On SIGTERM the server closes open SSE streams, so a rollout does not wait out the full 30 s grace
   period.
 - Production env: `NODE_ENV=production`, `DATABASE_URL`, `UPLOAD_DIR=/data/uploads`, `APP_PASSWORD`,
-  `APP_ACCESS_TOKEN`, `SESSION_SECRET` (set in the lily `compose.yaml`).
+  `APP_ACCESS_TOKEN`, `SESSION_SECRET`, `TZ=Europe/Prague` (set in the lily `compose.yaml`; the image defaults `TZ` too).
+- **The server refuses to start** (exit 1, `[startup] FATAL: invalid production environment: …`, names only) when
+  `APP_PASSWORD` is shorter than 8 chars, `APP_ACCESS_TOKEN` or `SESSION_SECRET` shorter than 32 chars, or any of
+  them equals a public dev default (`dev-password`, `dev-token`, `dev-session-secret-…`, `ci-session-secret-…`).
+  The repo's local `compose.yml` sets `ALLOW_DEV_SECRETS=1` so `docker compose up` works with the dev defaults —
+  **never set it on lily**. CI's e2e job generates throwaway random secrets instead.
+- Runs fine with `cap_drop: [ALL]` + `no-new-privileges` (lily web service and the CI e2e container use both).
+- **Uploads (25 MB/file)** are streamed to disk: `POST /api/attachments` is excluded from the Next proxy matcher (the
+  proxy would buffer every request body in memory), and the route enforces the size cap while streaming. Memory use
+  stays flat with concurrent uploads (verified: 6 × 24 MB in parallel ≈ +30 MiB), so `mem_limit: 512m` is enough.
+  Every other (JSON) body is capped at 1 MB by `proxyClientMaxBodySize` and 256 KB by the API.
+- **Client IP / rate limiting:** the login + magic-link limiter (10 attempts / 15 min / IP, in-memory per process)
+  takes the **right-most** `X-Forwarded-For` entry. This assumes exactly **one** trusted proxy hop (Traefik, which does
+  not trust client-sent forwarded headers and appends the real peer address). If another proxy/CDN is ever put in
+  front (e.g. Cloudflare orange cloud), this must be revisited. Without any proxy (local) the header is client-controlled.
 
 ### Running the CI steps locally
 ```bash
@@ -141,9 +156,9 @@ lands before steps 1–6, the deploy fails.
      | Key | Generate with | Notes |
      |---|---|---|
      | `POSTGRES_PASSWORD` | `openssl rand -hex 32` | **Hex only**: it goes into `DATABASE_URL` unescaped. The DB is initialised with it on the first deploy. |
-     | `APP_PASSWORD` | chosen by the owner, or `openssl rand -base64 18` | The shared team password for `/login`. |
-     | `APP_ACCESS_TOKEN` | `openssl rand -hex 24` | The magic link is `https://marketing.fotbal-fm.thedevs.cz/k/<APP_ACCESS_TOKEN>`. Keep it URL-safe (hex). |
-     | `SESSION_SECRET` | `openssl rand -hex 32` | HMAC key for the 1-year access cookie. |
+     | `APP_PASSWORD` | chosen by the owner (**min 8 chars**), or `openssl rand -base64 18` | The shared team password for `/login`. |
+     | `APP_ACCESS_TOKEN` | `openssl rand -hex 24` (**min 32 chars**) | The magic link is `https://marketing.fotbal-fm.thedevs.cz/k/<APP_ACCESS_TOKEN>`. Keep it URL-safe (hex). |
+     | `SESSION_SECRET` | `openssl rand -hex 32` (**min 32 chars**) | Part of the HMAC key for the 1-year access cookie. |
 
      `DATABASE_URL` is **not** an Infisical key: the lily `compose.yaml` builds it from
      `POSTGRES_PASSWORD`. All four keys must exist **before** the first deploy, because compose
@@ -209,11 +224,18 @@ change, do one of the following:
 - **[BOX]** `cd /srv/fotbal-fm-finances-planner && ./deploy.sh sha-<running sha>`. To find the running tag:
   `docker inspect -f '{{.Config.Image}}' $(docker compose ps -q web)`.
 
+The cookie signing key is derived from **all three** auth secrets:
+`HMAC key = SESSION_SECRET + "." + base64url(SHA-256(APP_PASSWORD + "\n" + APP_ACCESS_TOKEN))`
+(`sessionSigningKey()` in `src/server/auth/session.ts`). Rotating any one of them therefore **logs everyone out** —
+which is exactly what you want after a leak, a lost laptop, or someone leaving the team. Plan rotations so the team
+has the new password or link at hand. All values must still pass the startup check (lengths above, no dev defaults),
+otherwise the new container never becomes healthy and the rollout keeps the old one.
+
 | Secret | Steps | Effect on users |
 |---|---|---|
-| `APP_PASSWORD` (team password) | Set the new value in Infisical (`prod`) → redeploy → tell the team. | Existing cookies stay valid. Only new logins need the new password. To force everyone out, also rotate `SESSION_SECRET`. |
-| `APP_ACCESS_TOKEN` (magic link) | `openssl rand -hex 24` → Infisical → redeploy → share the new `https://marketing.fotbal-fm.thedevs.cz/k/<token>`. | Old links stop working. People already signed in stay signed in unless `SESSION_SECRET` is rotated too. |
-| `SESSION_SECRET` | `openssl rand -hex 32` → Infisical → redeploy. | **Logs everyone out.** Everyone has to use the link or the password again. Rotate it after a leak of the password or the token. |
+| `APP_PASSWORD` (team password) | Set the new value (min 8 chars) in Infisical (`prod`) → redeploy → tell the team. | **Logs everyone out**; sign in again with the new password or the (unchanged) magic link. |
+| `APP_ACCESS_TOKEN` (magic link) | `openssl rand -hex 24` → Infisical → redeploy → share the new `https://marketing.fotbal-fm.thedevs.cz/k/<token>`. | Old links stop working and **everyone is logged out**; sign in with the new link or the password. |
+| `SESSION_SECRET` | `openssl rand -hex 32` → Infisical → redeploy. | **Logs everyone out.** Use it to revoke all sessions without changing the password or the link. |
 | `POSTGRES_PASSWORD` | **[BOX]** Changing the env var alone does nothing, because the role password is set only when the DB is first initialised. Order: (1) `openssl rand -hex 32`; (2) `docker compose exec db psql -U planner -d planner -c "ALTER ROLE planner PASSWORD '<new>'"`, typed so it does not land in shell history; (3) update Infisical; (4) redeploy. The `db` container is re-created once (a 1–2 s blip) because its env changed. | None beyond the blip. |
 | `DEPLOY_WEBHOOK_SECRET` | **[BOX]** Replace the `FOTBAL_FM_FINANCES_PLANNER_DEPLOY_WEBHOOK_SECRET` line in `/srv/webhook/secrets.env` (back up first) → run `/srv/webhook/deploy.sh` (re-renders `hooks.yaml`; the receiver hot-reloads) → pipe the new value into `gh secret set DEPLOY_WEBHOOK_SECRET` exactly as in onboarding step 2. | Deploys fail until both sides match. |
 

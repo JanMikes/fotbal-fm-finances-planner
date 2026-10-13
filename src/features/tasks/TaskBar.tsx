@@ -7,8 +7,8 @@ export function TaskBar({ q, onQ }: { q: string; onQ: (q: string) => void }) {
   const state = useAppState();
   const [prefs, updatePrefs] = usePrefs();
   const groups = groupCounts(state.tasks);
-  const months = taskMonthOptions(state.tasks, prefs.filter);
   const month = prefs.month || "all";
+  const months = taskMonthOptions(state.tasks, prefs.filter, new Date(), month);
   return (
     <div className="bar">
       <div className="sub">

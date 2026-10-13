@@ -1,7 +1,7 @@
 /** „Aktuální budget" box view-model (prototype §10.2 `cbRender`, DECISIONS #2). Pure. */
 import type { BudgetInput } from "@/lib/api";
 import { computeBudget } from "@/lib/budget";
-import { monthKey, parseDigitsOrZero, signedKc } from "@/lib/format";
+import { monthKey, NBSP, parseDigitsOrZero, signedKc } from "@/lib/format";
 import type { Budget, OrgNode } from "@/lib/types";
 
 export type BudgetField = "spolek" | "asAmount" | "monthlyInstallment";
@@ -28,7 +28,7 @@ export interface BudgetView {
 
 export function budgetView(budget: Budget, nodes: readonly OrgNode[], now: Date = new Date()): BudgetView {
   const s = computeBudget(budget, nodes, now);
-  return { sum: signedKc(s.total), green: "− " + signedKc(s.green), left: signedKc(s.left), negative: s.left < 0, months: s.months };
+  return { sum: signedKc(s.total), green: "−" + NBSP + signedKc(s.green), left: signedKc(s.left), negative: s.left < 0, months: s.months };
 }
 
 /**

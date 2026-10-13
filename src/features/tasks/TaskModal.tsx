@@ -2,13 +2,38 @@
 /** Task modal „Úkol" / „Nový úkol" (prototype §8). Fullscreen on mobile via the prototype CSS. */
 import { useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
-import { AttachmentBox, applyAttachmentDraft, attachmentsOf, emptyDraft, type AttachmentDraft } from "@/features/attachments/AttachmentBox";
+import { DELETED_NOTICE, useCloseWhenDeleted } from "@/components/ui/useCloseWhenDeleted";
+import {
+  AttachmentBox,
+  applyAttachmentDraft,
+  attachmentsOf,
+  draftIsEmpty,
+  emptyDraft,
+  revokeDraft,
+  type AttachmentDraft,
+} from "@/features/attachments/AttachmentBox";
 import { uuid } from "@/lib/api";
 import { CATEGORY_OPTGROUPS, CATS } from "@/lib/constants";
 import { columnsOf, defaultTaskCategory } from "@/lib/filters";
 import { formatDate } from "@/lib/format";
-import { useActions, useAppState, usePrefs } from "@/lib/store/react";
+import { changedFields, isEmptyPatch } from "@/lib/patch";
+import { useActions, useAppState, usePrefs, useStore } from "@/lib/store/react";
 import { personsInOrder } from "@/lib/tree";
+
+type TaskForm = { category: string; columnId: string; title: string; dueDate: string; description: string; leadId: string; ownerId: string };
+
+/** Form values → API fields (shared by the save payload and the „unchanged" baseline). */
+function taskFields(f: TaskForm) {
+  return {
+    category: f.category,
+    columnId: f.columnId,
+    title: f.title.trim(),
+    description: f.description.trim(),
+    dueDate: f.dueDate || null,
+    leadId: f.leadId || null,
+    ownerId: f.ownerId || null,
+  };
+}
 
 export function TaskModal({
   id,
@@ -24,6 +49,7 @@ export function TaskModal({
   const state = useAppState();
   const [prefs] = usePrefs();
   const actions = useActions();
+  const store = useStore();
   const cols = columnsOf(state.columns, "tasks");
   const persons = personsInOrder(state.nodes);
 
@@ -32,7 +58,7 @@ export function TaskModal({
   const currentId = id ?? savedId;
   const ex = currentId ? state.tasks.find((t) => t.id === currentId) : undefined;
 
-  const [init] = useState(() => {
+  const [init] = useState((): TaskForm => {
     const t = id ? state.tasks.find((x) => x.id === id) : undefined;
     const cat = t ? t.category : defaultTaskCategory(prefs.filter);
     return {
@@ -59,11 +85,18 @@ export function TaskModal({
     return () => clearTimeout(t);
   }, [id]);
 
-  // the task was deleted elsewhere while open → close
-  const vanished = !!id && !ex;
+  // deleted elsewhere while open → close with a notice (instead of turning into a „new" form)
+  useCloseWhenDeleted(!!currentId && !ex, onClose);
+  const mounted = useRef(true);
   useEffect(() => {
-    if (vanished) onClose();
-  }, [vanished, onClose]);
+    mounted.current = true; // (re)mount — React dev mode runs effects twice
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const close = () => {
+    if (mounted.current) onClose();
+  };
 
   const creator = ex?.createdBy ? state.nodes.find((n) => n.id === ex.createdBy && n.kind === "person") : undefined;
 
@@ -74,36 +107,35 @@ export function TaskModal({
       titleRef.current?.focus();
       return;
     }
-    const fields = {
-      category: f.category,
-      columnId: f.columnId,
-      title,
-      description: f.description.trim(),
-      dueDate: f.dueDate || null,
-      leadId: f.leadId || null,
-      ownerId: f.ownerId || null,
-    };
+    const fields = taskFields(f);
     setBusy(true);
     let targetId = currentId;
     try {
       if (targetId && ex) {
-        await actions.updateTask(targetId, fields);
+        // only the changed fields: a concurrent edit (or a card move) by someone else is kept
+        const patch = changedFields(fields, taskFields(init));
+        if (!isEmptyPatch(patch)) await actions.updateTask(targetId, patch);
       } else {
         targetId = uuid();
         await actions.createTask({ ...fields, id: targetId, createdBy: prefs.me });
       }
     } catch {
-      setBusy(false); // the error toast shows the server message; keep the modal open
+      if (mounted.current) setBusy(false); // the error toast shows the server message; keep the modal open
       return;
     }
-    try {
-      await applyAttachmentDraft(actions, "task", targetId, draft);
-      onClose();
-    } catch {
-      if (!ex) setSavedId(targetId); // the item exists now — further saves update it
-      setDraft(emptyDraft()); // some attachments may have been saved — the refetched state shows which
-      setBusy(false);
+    const rest = await applyAttachmentDraft(actions, "task", targetId, draft);
+    if (draftIsEmpty(rest)) return close();
+    // some attachments failed: find out what was saved — and whether the task still exists
+    await store.load();
+    if (!store.getSnapshot().state?.tasks.some((t) => t.id === targetId)) {
+      revokeDraft(rest);
+      store.notify(DELETED_NOTICE);
+      return close();
     }
+    if (!mounted.current) return revokeDraft(rest);
+    if (!ex) setSavedId(targetId); // the item exists now — further saves update it
+    setDraft(rest); // keep only what failed, so „Uložit" retries it
+    setBusy(false);
   };
 
   const duplicate = async () => {

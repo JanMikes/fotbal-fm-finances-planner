@@ -39,11 +39,56 @@ export function camelizeKeys(v: unknown): unknown {
   return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, val]) => [snakeToCamel(k), val]));
 }
 
+/** Whether the request declares a JSON body (`application/json`, optionally with parameters). */
+export function isJsonContentType(req: Request): boolean {
+  const type = (req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+  return type === "application/json";
+}
+
+/**
+ * Parse + validate a JSON body. A non-empty body MUST be sent as `application/json` (415 otherwise) — this blocks
+ * `<form enctype="text/plain">` CSRF payloads. An empty body (e.g. POST …/close without a body) is treated as `{}`.
+ */
+/** JSON bodies are small (longest field: 10 000 chars); anything bigger is rejected while streaming. */
+export const MAX_JSON_BYTES = 256 * 1024;
+
+const payloadTooLarge = () => new HttpError(413, "too_large", "Požadavek je příliš velký.");
+
+/** Read the body as UTF-8 text, aborting once it exceeds `maxBytes` (never buffers more than that). */
+export async function readTextCapped(req: Request, maxBytes: number): Promise<string> {
+  const declared = Number(req.headers.get("content-length") ?? "");
+  if (Number.isFinite(declared) && declared > maxBytes) throw payloadTooLarge();
+  if (!req.body) return "";
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw payloadTooLarge();
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 export async function parseBody<T extends z.ZodType>(req: Request, schema: T): Promise<z.infer<T>> {
   let body: unknown;
+  let text: string;
   try {
-    const text = await req.text();
-    body = text ? JSON.parse(text) : {};
+    text = await readTextCapped(req, MAX_JSON_BYTES);
+  } catch (err) {
+    if (err instanceof HttpError) throw err;
+    throw badRequest("Neplatný požadavek.");
+  }
+  if (text.trim() && !isJsonContentType(req)) {
+    throw new HttpError(415, "unsupported_media_type", "Data musí být odeslána jako JSON (Content-Type: application/json).");
+  }
+  try {
+    body = text.trim() ? JSON.parse(text) : {};
   } catch {
     throw badRequest("Neplatný JSON.");
   }
@@ -63,7 +108,9 @@ export function errorResponse(err: unknown): Response {
     return json({ error: err.code, message: err.message, ...(err.details ? { details: err.details } : {}) }, err.status);
   }
   if (err instanceof ZodError) {
-    return json({ error: "validation", message: "Neplatná data.", details: err.issues }, 400);
+    // Surface a custom Czech message (e.g. the date range) when the issue carries one.
+    const custom = err.issues.find((i) => i.code === "custom" && i.message)?.message;
+    return json({ error: "validation", message: custom ?? "Neplatná data.", details: err.issues }, 400);
   }
   const pgErr = err as PgError;
   if (pgErr && typeof pgErr === "object" && typeof pgErr.code === "string") {
@@ -71,6 +118,9 @@ export function errorResponse(err: unknown): Response {
     if (pgErr.code === "23503") return json({ error: "bad_reference", message: "Odkazovaný záznam neexistuje.", details: pgErr.constraint }, 400);
     if (pgErr.code === "23514") return json({ error: "validation", message: "Neplatná data.", details: pgErr.constraint }, 400);
     if (pgErr.code === "22P02") return json({ error: "validation", message: "Neplatný formát hodnoty." }, 400);
+    if (pgErr.code === "40P01" || pgErr.code === "40001") {
+      return json({ error: "conflict", message: "Souběžná změna — zkuste to prosím znovu." }, 409);
+    }
   }
   // drizzle wraps driver errors in `cause`
   const cause = (err as { cause?: unknown })?.cause;
@@ -94,7 +144,14 @@ export function route<P = Record<string, string>>(fn: (req: Request, params: P) 
 
 // ---------------------------------------------------------------- shared zod pieces
 export const zId = z.uuid();
-export const zIsoDate = z.iso.date();
+/** Accepted year range for every date (a typo year such as 0026 would break the yearly report). */
+export const MIN_YEAR = 2000;
+export const MAX_YEAR = 2100;
+export const DATE_RANGE_MESSAGE = `Datum musí být mezi roky ${MIN_YEAR} a ${MAX_YEAR}.`;
+export const zIsoDate = z.iso.date().refine((s) => {
+  const y = Number(s.slice(0, 4));
+  return y >= MIN_YEAR && y <= MAX_YEAR;
+}, DATE_RANGE_MESSAGE);
 /** Integer Kč / ks; accepts numbers or free text (digits are extracted like the prototype). */
 export const zMoney = z.preprocess((v) => {
   if (v === null || v === undefined || v === "") return v === "" ? null : v;

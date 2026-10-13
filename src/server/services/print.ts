@@ -8,7 +8,9 @@ import { getDb, type DbOrTx } from "../db/client";
 import { printItems, printTypes, printYearClosures } from "../db/schema";
 import { badRequest, conflict, notFound, zId, zRequiredText, type Ctx } from "../http";
 import { notify } from "../notify";
+import { pragueNow } from "../time";
 import { mapClosure, mapPrintItem, mapPrintType } from "./mappers";
+import { lockContainers } from "./ordering";
 
 export const createPrintTypeSchema = z.object({ id: zId.optional(), name: zRequiredText(100) });
 export const updatePrintTypeSchema = z.object({ name: zRequiredText(100) }).strict();
@@ -21,6 +23,7 @@ async function nameTaken(tx: DbOrTx, name: string, exceptId?: string) {
 
 export async function createPrintType(input: z.infer<typeof createPrintTypeSchema>, ctx: Ctx): Promise<PrintType> {
   return getDb().transaction(async (tx) => {
+    await lockContainers(tx, ["print_types"]);
     if (await nameTaken(tx, input.name)) throw conflict("Typ s tímto názvem již existuje.");
     const all = await tx.select().from(printTypes);
     const [row] = await tx
@@ -39,6 +42,7 @@ export async function createPrintType(input: z.infer<typeof createPrintTypeSchem
 /** Rename: items reference the type by id, so they follow automatically. */
 export async function renamePrintType(id: string, input: z.infer<typeof updatePrintTypeSchema>, ctx: Ctx): Promise<PrintType> {
   return getDb().transaction(async (tx) => {
+    await lockContainers(tx, ["print_types"]);
     if (await nameTaken(tx, input.name, id)) throw conflict("Typ s tímto názvem již existuje.");
     const [row] = await tx.update(printTypes).set({ name: input.name }).where(eq(printTypes.id, id)).returning();
     if (!row) throw notFound("Typ média nenalezen.");
@@ -50,7 +54,7 @@ export async function renamePrintType(id: string, input: z.infer<typeof updatePr
 /** Delete: at least one type must remain; items move to the first remaining type. */
 export async function deletePrintType(id: string, ctx: Ctx): Promise<{ movedTo: string; movedCount: number }> {
   return getDb().transaction(async (tx) => {
-    await tx.execute(sql`lock table ${printTypes} in share row exclusive mode`);
+    await lockContainers(tx, ["print_types"]);
     const all = await tx.select().from(printTypes).orderBy(asc(printTypes.sortOrder));
     if (!all.some((t) => t.id === id)) throw notFound("Typ média nenalezen.");
     if (all.length <= 1) throw badRequest("Musí zůstat alespoň jeden typ.");
@@ -88,7 +92,8 @@ export async function reopenYear(year: number, ctx: Ctx): Promise<{ unarchivedCo
   });
 }
 
-export async function yearReport(year: number, now: Date = new Date()): Promise<YearReport> {
+/** `now` defaults to the Prague wall clock, so "current year/month" is right around midnight on 1 January. */
+export async function yearReport(year: number, now: Date = pragueNow()): Promise<YearReport> {
   const db = getDb();
   const [items, types, closures] = await Promise.all([
     db.select().from(printItems).orderBy(asc(printItems.sortOrder)),

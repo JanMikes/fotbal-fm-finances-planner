@@ -4,7 +4,7 @@
  */
 import { appendOrder, planInsert, type InsertPosition } from "../sortOrder";
 import { descendantsOf } from "../tree";
-import type { AppState, Attachment, BoardColumn, Budget, OrgNode, PrintItem, PrintType, Task } from "../types";
+import type { AppState, BoardColumn, Budget, OrgNode, PrintItem, PrintType, Task } from "../types";
 
 type WithSort = { id: string; columnId: string; sortOrder: number };
 
@@ -236,10 +236,6 @@ export function duplicatePerson(s: AppState, srcId: string, newId: string): AppS
 // ---------------------------------------------------------------- misc
 export function setBudget(s: AppState, patch: Partial<Budget>): AppState {
   return { ...s, budget: { ...s.budget, ...patch } };
-}
-
-export function addAttachment(s: AppState, a: Attachment): AppState {
-  return { ...s, attachments: [...s.attachments.filter((x) => x.id !== a.id), a] };
 }
 
 export function removeAttachment(s: AppState, id: string): AppState {

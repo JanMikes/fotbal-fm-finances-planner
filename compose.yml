@@ -8,7 +8,11 @@ x-app-env: &app-env
   APP_PASSWORD: ${APP_PASSWORD:-dev-password}
   APP_ACCESS_TOKEN: ${APP_ACCESS_TOKEN:-dev-token}
   SESSION_SECRET: ${SESSION_SECRET:-dev-session-secret-change-me-0000000000}
+  # The production image refuses to start with the public dev secrets above (or short ones) unless this is "1".
+  # LOCAL ONLY — the lily compose never sets it. Set ALLOW_DEV_SECRETS=0 to test the production check locally.
+  ALLOW_DEV_SECRETS: ${ALLOW_DEV_SECRETS:-1}
   UPLOAD_DIR: /data/uploads
+  TZ: Europe/Prague
 
 services:
   postgres:

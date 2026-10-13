@@ -2,7 +2,6 @@
  * Typed browser API client. Every mutation sends `X-Client-Id` (this tab's id) so realtime events caused by this
  * tab can be ignored. A 401 redirects to /login.
  */
-import type { YearReport } from "./report";
 import type {
   AppState,
   Attachment,
@@ -47,15 +46,33 @@ export const CLIENT_ID: string = typeof window === "undefined" ? "server" : newI
 
 type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 
-export async function request<T>(method: Method, path: string, body?: unknown, init?: { signal?: AbortSignal }): Promise<T> {
+export interface RequestInit2 {
+  signal?: AbortSignal;
+  /** Let the request outlive the page (flush on `pagehide`). */
+  keepalive?: boolean;
+}
+
+/**
+ * Same-origin JSON request (relative URL → the browser sends `Origin` itself). Every non-GET request carries
+ * `Content-Type: application/json` (the server rejects anything else), except multipart uploads (FormData).
+ */
+export async function request<T>(method: Method, path: string, body?: unknown, init?: RequestInit2): Promise<T> {
   const headers: Record<string, string> = { "X-Client-Id": CLIENT_ID, Accept: "application/json" };
   let payload: BodyInit | undefined;
   if (body instanceof FormData) payload = body;
-  else if (body !== undefined) {
-    headers["Content-Type"] = "application/json";
-    payload = JSON.stringify(body);
+  else {
+    if (method !== "GET") headers["Content-Type"] = "application/json";
+    if (body !== undefined) payload = JSON.stringify(body);
   }
-  const res = await fetch(path, { method, headers, body: payload, credentials: "same-origin", cache: "no-store", signal: init?.signal });
+  const res = await fetch(path, {
+    method,
+    headers,
+    body: payload,
+    credentials: "same-origin",
+    cache: "no-store",
+    signal: init?.signal,
+    keepalive: init?.keepalive,
+  });
   if (res.status === 401 && typeof window !== "undefined") {
     // full reload on purpose: the proxy serves /login
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination
@@ -65,17 +82,27 @@ export async function request<T>(method: Method, path: string, body?: unknown, i
   const text = await res.text();
   const data = text ? safeJson(text) : undefined;
   if (!res.ok) {
-    const d = (data ?? {}) as { error?: string; message?: string; details?: unknown };
-    throw new ApiError(res.status, d.error ?? "http_error", d.message ?? `HTTP ${res.status}`, d.details);
+    // only the app's own JSON errors (`{error, message}`) carry a user-facing Czech message; proxy pages
+    // („Bad Gateway", HTML bodies) get a generic Czech text instead
+    const d = (data ?? {}) as { error?: unknown; message?: unknown; details?: unknown };
+    const own = typeof d.error === "string" && typeof d.message === "string" && d.message.trim() !== "";
+    throw new ApiError(res.status, own ? (d.error as string) : "http_error", own ? (d.message as string) : httpErrorMessage(res.status), d.details);
   }
   return data as T;
+}
+
+/** Czech fallback text for an HTTP error without an app error body. */
+function httpErrorMessage(status: number): string {
+  if (status === 502 || status === 503 || status === 504) return "Server je dočasně nedostupný. Zkuste to prosím za chvíli znovu.";
+  if (status === 413) return "Soubor je příliš velký.";
+  return `Něco se nepovedlo (chyba ${status}). Zkuste to prosím znovu.`;
 }
 
 function safeJson(t: string): unknown {
   try {
     return JSON.parse(t);
   } catch {
-    return { message: t };
+    return undefined;
   }
 }
 
@@ -146,10 +173,9 @@ export const api = {
   deletePrintItem: (id: string) => request<{ ok: true }>("DELETE", `/api/print-items/${id}`),
   closeYear: (year: number) => request<{ closure: PrintYearClosure; archivedCount: number }>("POST", `/api/print/years/${year}/close`),
   reopenYear: (year: number) => request<{ unarchivedCount: number }>("DELETE", `/api/print/years/${year}/close`),
-  yearReport: (year: number) => request<YearReport>("GET", `/api/print/years/${year}/report`),
 
   // budget
-  updateBudget: (input: BudgetInput) => request<Budget>("PUT", "/api/budget", input),
+  updateBudget: (input: BudgetInput, init?: RequestInit2) => request<Budget>("PUT", "/api/budget", input, init),
 
   // attachments
   uploadFile: (parentKind: ParentKind, parentId: string, file: File, id?: string) => {

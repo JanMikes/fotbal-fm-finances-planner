@@ -98,19 +98,19 @@ describe("budget box model", () => {
   ];
   it("formats Celkem, V budgetu, Zbývá (installment × months incl. current)", () => {
     const v = budgetView(budget, nodes, now);
-    expect(v.sum).toBe("200 000 Kč");
-    expect(v.green).toBe("− 25 000 Kč");
+    expect(v.sum).toBe("200\u00a0000\u00a0Kč");
+    expect(v.green).toBe("−\u00a025\u00a0000\u00a0Kč");
     expect(v.months).toBe(3);
-    expect(v.left).toBe("152 500 Kč");
+    expect(v.left).toBe("152\u00a0500\u00a0Kč");
     expect(v.negative).toBe(false);
   });
   it("overspent → red with U+2212 minus", () => {
     const v = budgetView({ ...budget, spolek: 0, asAmount: 10000 }, nodes, now);
-    expect(v.left).toBe("−37 500 Kč");
+    expect(v.left).toBe("−37\u00a0500\u00a0Kč");
     expect(v.negative).toBe(true);
   });
   it("draft texts override stored numbers, digits only", () => {
-    expect(applyDraft(budget, { spolek: "1 000 Kč", asAmount: "" })).toMatchObject({ spolek: 1000, asAmount: 0, monthlyInstallment: 7500 });
+    expect(applyDraft(budget, { spolek: "1\u00a0000\u00a0Kč", asAmount: "" })).toMatchObject({ spolek: 1000, asAmount: 0, monthlyInstallment: 7500 });
   });
   it("budgetPatch stores digits only and sets installmentFrom on the first non-zero installment", () => {
     expect(budgetPatch("spolek", "25 000,-", budget, now)).toEqual({ spolek: 25000 });

@@ -3,13 +3,20 @@ import { z } from "zod";
 import type { Budget } from "@/lib/types";
 import { getDb } from "../db/client";
 import { budget } from "../db/schema";
-import { zMoney, type Ctx } from "../http";
+import { MAX_YEAR, MIN_YEAR, zMoney, type Ctx } from "../http";
 import { notify } from "../notify";
+import { currentMonthStart } from "../time";
 import { mapBudget } from "./mappers";
+
+export { currentMonthStart };
 
 const zMonth = z
   .string()
   .regex(/^\d{4}-(0[1-9]|1[0-2])(-\d{2})?$/, "Měsíc ve formátu YYYY-MM.")
+  .refine((s) => {
+    const y = Number(s.slice(0, 4));
+    return y >= MIN_YEAR && y <= MAX_YEAR;
+  }, `Měsíc musí být mezi roky ${MIN_YEAR} a ${MAX_YEAR}.`)
   .transform((s) => `${s.slice(0, 7)}-01`);
 
 export const budgetSchema = z
@@ -21,22 +28,16 @@ export const budgetSchema = z
   })
   .strict();
 
-/** Current month (Europe/Prague) as "YYYY-MM-01". */
-export function currentMonthStart(now: Date = new Date()): string {
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Prague", year: "numeric", month: "2-digit" }).formatToParts(now);
-  const y = parts.find((p) => p.type === "year")!.value;
-  const m = parts.find((p) => p.type === "month")!.value;
-  return `${y}-${m}-01`;
-}
-
 export async function getBudget(): Promise<Budget> {
   const [row] = await getDb().select().from(budget).where(eq(budget.id, 1));
   return mapBudget(row);
 }
 
 /**
- * Partial update of the singleton. When a non-zero installment is saved and no start month is set (and none is
- * provided), installmentFrom is set to the current month (prototype behaviour, DECISIONS #2).
+ * Partial update of the singleton (only the provided fields change). `installmentFrom: null` means "no deduction
+ * yet". When a non-zero `monthlyInstallment` is SAVED (present in the request) while no start month is stored and
+ * none is provided, installmentFrom is set to the current month in Europe/Prague (DECISIONS #2). An explicitly
+ * provided installmentFrom (a month or null) always wins; saving other fields never sets it.
  */
 export async function updateBudget(input: z.infer<typeof budgetSchema>, ctx: Ctx): Promise<Budget> {
   return getDb().transaction(async (tx) => {
@@ -47,9 +48,10 @@ export async function updateBudget(input: z.infer<typeof budgetSchema>, ctx: Ctx
     if (input.asAmount !== undefined) patch.asAmount = input.asAmount ?? 0;
     if (input.monthlyInstallment !== undefined) patch.monthlyInstallment = input.monthlyInstallment ?? 0;
     if (input.installmentFrom !== undefined) patch.installmentFrom = input.installmentFrom;
-    const installment = patch.monthlyInstallment ?? current.monthlyInstallment;
-    const from = patch.installmentFrom !== undefined ? patch.installmentFrom : current.installmentFrom;
-    if (installment > 0 && !from && input.installmentFrom === undefined) patch.installmentFrom = currentMonthStart();
+    const savedInstallment = patch.monthlyInstallment;
+    if (savedInstallment !== undefined && savedInstallment > 0 && !current.installmentFrom && input.installmentFrom === undefined) {
+      patch.installmentFrom = currentMonthStart();
+    }
     const [row] = Object.keys(patch).length
       ? await tx.update(budget).set(patch).where(eq(budget.id, 1)).returning()
       : [current];

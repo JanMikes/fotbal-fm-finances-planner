@@ -7,9 +7,9 @@ import { getDb, type DbOrTx, type Tx } from "../db/client";
 import { boardColumns, orgNodes, printItems, printTypes, tasks } from "../db/schema";
 import { badRequest, notFound, zId, zIsoDate, zMoney, zRequiredText, zTrimmed, type Ctx } from "../http";
 import { notify } from "../notify";
-import { copyAttachments, deleteAttachmentsOf } from "./attachments";
+import { copyAttachments, deleteAttachmentsOf, withFileRollback } from "./attachments";
 import { mapColumn, mapPrintItem, mapTask } from "./mappers";
-import { applyPlacement } from "./ordering";
+import { applyPlacement, lockContainers } from "./ordering";
 
 // ---------------------------------------------------------------- columns
 
@@ -35,6 +35,7 @@ const PRINT_COLUMNS_FIXED = "Sloupce tiskovin jsou pevné — nelze je přidáva
 export async function createColumn(input: z.infer<typeof createColumnSchema>, ctx: Ctx): Promise<BoardColumn> {
   if (input.boardId !== "tasks") throw badRequest(PRINT_COLUMNS_FIXED);
   return getDb().transaction(async (tx) => {
+    await lockContainers(tx, ["board:tasks"]);
     const cols = await columnsOfBoard(tx, "tasks");
     const [row] = await tx
       .insert(boardColumns)
@@ -63,12 +64,14 @@ export async function updateColumn(id: string, input: z.infer<typeof updateColum
 /** Delete a task column: at least one must remain; its tasks move to the end of the (new) first column. */
 export async function deleteColumn(id: string, ctx: Ctx): Promise<{ movedTo: string; movedCount: number }> {
   return getDb().transaction(async (tx) => {
-    await tx.execute(sql`lock table ${boardColumns} in share row exclusive mode`);
+    // board-level key first (column list), then both affected columns (their task lists)
+    await lockContainers(tx, ["board:tasks"]);
     const col = await getColumnOr404(tx, id);
     if (col.boardId !== "tasks") throw badRequest(PRINT_COLUMNS_FIXED);
     const cols = await columnsOfBoard(tx, "tasks");
     if (cols.length <= 1) throw badRequest("Musí zůstat alespoň jeden sloupec.");
     const first = cols.find((c) => c.id !== id)!;
+    await lockContainers(tx, [`column:${id}`, `column:${first.id}`]);
     const moving = await tx.select({ id: tasks.id }).from(tasks).where(eq(tasks.columnId, id)).orderBy(asc(tasks.sortOrder));
     if (moving.length) {
       const target = await taskSiblings(tx, first.id);
@@ -130,9 +133,14 @@ async function getTaskOr404(tx: DbOrTx, id: string) {
   return row;
 }
 
-/** Lock a column's rows so concurrent moves/creates compute consistent neighbours. */
+/**
+ * Serialise writes into a column's item list so concurrent moves/creates/duplicates compute consistent neighbours
+ * (same keys as deleteColumn). Re-checks that the column still exists after waiting for the lock.
+ */
 async function lockColumns(tx: Tx, ids: string[]) {
-  await tx.execute(sql`select id from ${boardColumns} where ${inArray(boardColumns.id, ids)} for update`);
+  await lockContainers(tx, ids.map((id) => `column:${id}`));
+  const rows = await tx.select({ id: boardColumns.id }).from(boardColumns).where(inArray(boardColumns.id, ids));
+  if (rows.length !== new Set(ids).size) throw badRequest("Sloupec mezitím někdo smazal.");
 }
 
 export async function createTask(input: z.infer<typeof createTaskSchema>, ctx: Ctx): Promise<Task> {
@@ -194,7 +202,10 @@ export async function moveTask(id: string, input: z.infer<typeof moveSchema>, ct
 
 export async function deleteTask(id: string, ctx: Ctx): Promise<void> {
   const files = await getDb().transaction(async (tx) => {
-    await getTaskOr404(tx, id);
+    // FOR UPDATE: waits for an in-flight upload (which holds FOR SHARE on the parent), so its attachment row is
+    // deleted here too instead of being orphaned.
+    const [locked] = await tx.select({ id: tasks.id }).from(tasks).where(eq(tasks.id, id)).for("update");
+    if (!locked) throw notFound("Úkol nenalezen.");
     const keys = await deleteAttachmentsOf(tx, "task", [id]);
     await tx.delete(tasks).where(eq(tasks.id, id));
     await notify(tx, ctx, "task", "delete", id);
@@ -205,9 +216,14 @@ export async function deleteTask(id: string, ctx: Ctx): Promise<void> {
 
 /** Duplicate („(kopie)") placed right after the original in the same column; attachments are copied. */
 export async function duplicateTask(id: string, input: z.infer<typeof duplicateSchema>, ctx: Ctx) {
-  return getDb().transaction(async (tx) => {
-    const src = await getTaskOr404(tx, id);
+  const copiedFiles: string[] = [];
+  return withFileRollback(copiedFiles, () => getDb().transaction(async (tx) => {
+    let src = await getTaskOr404(tx, id);
     await lockColumns(tx, [src.columnId]);
+    // re-read under the lock: a concurrent move may have changed its column meanwhile
+    const fresh = await getTaskOr404(tx, id);
+    if (fresh.columnId !== src.columnId) await lockColumns(tx, [fresh.columnId]);
+    src = fresh;
     await assertPersons(tx, [input.createdBy]);
     const sibs = await taskSiblings(tx, src.columnId);
     const { id: _i, createdAt: _c, ...rest } = src;
@@ -224,10 +240,10 @@ export async function duplicateTask(id: string, input: z.infer<typeof duplicateS
       })
       .returning();
     await applyPlacement(tx, tasks, sibs, row.id, { afterId: id });
-    const copied = await copyAttachments(tx, "task", id, row.id);
+    const copied = await copyAttachments(tx, "task", id, row.id, copiedFiles);
     await notify(tx, ctx, "task", "duplicate", row.id);
     return { task: mapTask(await getTaskOr404(tx, row.id)), attachments: copied };
-  });
+  }));
 }
 
 // ---------------------------------------------------------------- print items
@@ -328,7 +344,8 @@ export async function movePrintItem(id: string, input: z.infer<typeof moveSchema
 
 export async function deletePrintItem(id: string, ctx: Ctx): Promise<void> {
   const files = await getDb().transaction(async (tx) => {
-    await getPrintItemOr404(tx, id);
+    const [locked] = await tx.select({ id: printItems.id }).from(printItems).where(eq(printItems.id, id)).for("update");
+    if (!locked) throw notFound("Tiskovina nenalezena.");
     const keys = await deleteAttachmentsOf(tx, "print", [id]);
     await tx.delete(printItems).where(eq(printItems.id, id));
     await notify(tx, ctx, "print_item", "delete", id);
@@ -338,9 +355,13 @@ export async function deletePrintItem(id: string, ctx: Ctx): Promise<void> {
 }
 
 export async function duplicatePrintItem(id: string, input: z.infer<typeof duplicateSchema>, ctx: Ctx) {
-  return getDb().transaction(async (tx) => {
-    const src = await getPrintItemOr404(tx, id);
+  const copiedFiles: string[] = [];
+  return withFileRollback(copiedFiles, () => getDb().transaction(async (tx) => {
+    let src = await getPrintItemOr404(tx, id);
     await lockColumns(tx, [src.columnId]);
+    const fresh = await getPrintItemOr404(tx, id);
+    if (fresh.columnId !== src.columnId) await lockColumns(tx, [fresh.columnId]);
+    src = fresh;
     await assertPersons(tx, [input.createdBy]);
     const sibs = await printSiblings(tx, src.columnId);
     const { id: _i, createdAt: _c, ...rest } = src;
@@ -357,8 +378,8 @@ export async function duplicatePrintItem(id: string, input: z.infer<typeof dupli
       })
       .returning();
     await applyPlacement(tx, printItems, sibs, row.id, { afterId: id });
-    const copied = await copyAttachments(tx, "print", id, row.id);
+    const copied = await copyAttachments(tx, "print", id, row.id, copiedFiles);
     await notify(tx, ctx, "print_item", "duplicate", row.id);
     return { printItem: mapPrintItem(await getPrintItemOr404(tx, row.id)), attachments: copied };
-  });
+  }));
 }

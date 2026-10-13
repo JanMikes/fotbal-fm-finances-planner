@@ -3,9 +3,11 @@
  * Generic modal shell (prototype §8.1 `shell(title, body, foot)`):
  *   <div class="ov"><div class="modal" role="dialog"><div class="mh"><h2/><button class="close"/></div>{body}<div class="mf">{foot}</div></div></div>
  * Closes on Escape, on pointerdown on the overlay itself and via the × button. No unsaved-changes guard (prototype).
- * Rendered by the caller inside #modalRoot (sibling of .app), so the print stylesheet keeps working.
+ * Lives inside #modalRoot (sibling of .app) so the print stylesheet keeps working: either rendered there by the
+ * caller (ModalHost) or, with `portal`, portalled there from anywhere (team forms).
  */
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 export interface ModalProps {
   title: string;
@@ -15,9 +17,11 @@ export interface ModalProps {
   foot: ReactNode;
   /** Extra attributes for e2e tests / styling. */
   testId?: string;
+  /** Portal the modal into `#modalRoot` (for callers rendered inside `.app`). */
+  portal?: boolean;
 }
 
-export function Modal({ title, onClose, children, foot, testId }: ModalProps) {
+export function Modal({ title, onClose, children, foot, testId, portal = false }: ModalProps) {
   const closeRef = useRef(onClose);
   useEffect(() => {
     closeRef.current = onClose;
@@ -31,7 +35,9 @@ export function Modal({ title, onClose, children, foot, testId }: ModalProps) {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  return (
+  const [host] = useState(() => (portal && typeof document !== "undefined" ? (document.getElementById("modalRoot") ?? document.body) : null));
+
+  const el = (
     <div
       className="ov"
       id="ov"
@@ -51,4 +57,6 @@ export function Modal({ title, onClose, children, foot, testId }: ModalProps) {
       </div>
     </div>
   );
+  if (!portal) return el;
+  return host ? createPortal(el, host) : null;
 }

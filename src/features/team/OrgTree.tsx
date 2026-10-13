@@ -5,9 +5,10 @@
  * `data-uid`, `data-unit`, `data-sub` (+ button), `data-info` (i button).
  */
 import { memo } from "react";
+import { Avatar } from "@/components/ui/Avatar";
 import { CATS } from "@/lib/constants";
-import { kcs, ini } from "@/lib/format";
-import { buildTree, colorOf, isLightColor, peopleCount, personStats, unitTaskCount, type TreeNode } from "@/lib/tree";
+import { kcs } from "@/lib/format";
+import { buildTree, isLightColor, peopleCount, personStats, unitTaskCount, type TreeNode } from "@/lib/tree";
 import type { OrgNode, Task } from "@/lib/types";
 import type { DropPos } from "./dropZone";
 
@@ -67,22 +68,13 @@ function Branch({ t, root, ctx }: { t: TreeNode; root?: boolean; ctx: Ctx }) {
   );
 }
 
-export function Avatar({ nodes, n }: { nodes: OrgNode[]; n: OrgNode }) {
-  const bg = colorOf(nodes, n.id);
-  return (
-    <span className="av" style={{ background: bg, color: isLightColor(bg) ? "var(--fm-navy)" : "#fff" }} title={`Zodpovědný: ${n.name}`}>
-      {ini(n.name)}
-    </span>
-  );
-}
-
 function PersonCard({ n, root, ctx }: { n: OrgNode; root: boolean; ctx: Ctx }) {
   const { act, lead } = personStats(n.id, ctx.tasks, ctx.lastColumnId);
   const bud = n.budgetColor === "green" ? " green" : n.budgetColor === "red" ? " red" : "";
   return (
     <div className={"onode" + (root ? " root" : "") + dragCls(n.id, ctx)} data-uid={n.id} role="button" tabIndex={0}>
       <div className="hd">
-        <Avatar nodes={ctx.nodes} n={n} />
+        <Avatar nodes={ctx.nodes} id={n.id} />
         <div>
           <div className="nm">{n.name}</div>
           <div className="rl">{n.role || "Člen týmu"}</div>

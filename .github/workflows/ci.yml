@@ -154,18 +154,28 @@ jobs:
                       docker run --rm --network e2e -e DATABASE_URL="$DB_URL_IN_NET" "$IMAGE" node migrate.mjs
                     done
 
+            -   name: Generate throwaway production-grade secrets
+                # The production image refuses the public dev values (and short ones), exactly as on lily.
+                run: |
+                    {
+                      echo "E2E_APP_PASSWORD=$(openssl rand -hex 12)"
+                      echo "E2E_APP_ACCESS_TOKEN=$(openssl rand -hex 24)"
+                      echo "E2E_SESSION_SECRET=$(openssl rand -hex 32)"
+                    } >> "$GITHUB_ENV"
+
             -   name: Start the app (as on lily)
                 run: |
                     # Fresh EMPTY named volume, like the external volume on the box: the
                     # image's /data/uploads ownership (uid 1001) must carry over to it.
                     docker volume create e2e_uploads
                     docker run -d --name e2e-app --network e2e -p 127.0.0.1:3000:3000 \
-                      --memory 512m --security-opt no-new-privileges:true \
+                      --memory 512m --security-opt no-new-privileges:true --cap-drop ALL \
                       -v e2e_uploads:/data/uploads \
                       -e NODE_ENV=production \
                       -e DATABASE_URL="$DB_URL_IN_NET" \
                       -e UPLOAD_DIR=/data/uploads \
-                      -e APP_PASSWORD -e APP_ACCESS_TOKEN -e SESSION_SECRET \
+                      -e APP_PASSWORD="$E2E_APP_PASSWORD" -e APP_ACCESS_TOKEN="$E2E_APP_ACCESS_TOKEN" \
+                      -e SESSION_SECRET="$E2E_SESSION_SECRET" \
                       "$IMAGE"
                     for i in $(seq 1 60); do
                       curl -fsS "$BASE_URL/api/health" >/dev/null 2>&1 && break
@@ -200,6 +210,10 @@ jobs:
 
             -   name: Playwright e2e
                 run: npm run test:e2e
+                env:
+                    APP_PASSWORD: ${{ env.E2E_APP_PASSWORD }}
+                    APP_ACCESS_TOKEN: ${{ env.E2E_APP_ACCESS_TOKEN }}
+                    SESSION_SECRET: ${{ env.E2E_SESSION_SECRET }}
 
             -   name: App logs
                 if: failure()

@@ -14,3 +14,6 @@
 .login .f input[aria-invalid="true"]{border-color:#b3261e}
 .login-err{margin:-6px 0 0;color:#b3261e;font-size:13px;font-weight:700}
 .login .btn{width:100%}
+
+/* While a card is dragged, mandatory scroll-snap (mobile boards) would snap the edge autoscroll back every frame. */
+body.dragging .board{scroll-snap-type:none}

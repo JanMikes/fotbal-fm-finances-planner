@@ -116,7 +116,7 @@ test.describe.serial("yearly print report", () => {
       void d.accept();
     });
     await page.locator("#yrClose").click();
-    expect(dialogText).toBe(`Uzavřít rok ${YEAR}? 4 položek za 7 500 Kč se přesune do archivu.`);
+    expect(dialogText).toBe(`Uzavřít rok ${YEAR}? 4 položek za 7\u00a0500\u00a0Kč se přesune do archivu.`); // amounts use non-breaking spaces
     await expect(page.locator(".yv-st")).toContainText("Uzavřeno");
     await expect(page.locator("#yrOpen")).toHaveText("Znovu otevřít");
     // the report still shows the (now archived) items

@@ -196,17 +196,33 @@ export function draftIsEmpty(d: AttachmentDraft): boolean {
   return d.removed.size === 0 && d.files.length === 0 && d.links.length === 0;
 }
 
-/** Apply the draft to a saved parent: upload pending files, add links, delete removed attachments. */
-export async function applyAttachmentDraft(actions: Actions, parentKind: ParentKind, parentId: string, d: AttachmentDraft): Promise<void> {
-  if (draftIsEmpty(d)) return;
-  await Promise.all([
-    ...[...d.removed].map((id) => actions.deleteAttachment(id)),
-    ...d.files.map((f) => actions.uploadFile(parentKind, parentId, f.file)),
+/**
+ * Apply the draft to a saved parent: upload pending files, add links, delete removed attachments. Every part is
+ * attempted; resolves with the draft of what FAILED (empty = everything saved). Blob URLs of uploaded files are revoked.
+ */
+export async function applyAttachmentDraft(actions: Actions, parentKind: ParentKind, parentId: string, d: AttachmentDraft): Promise<AttachmentDraft> {
+  if (draftIsEmpty(d)) return d;
+  const removed = [...d.removed];
+  const failedLinks: PendingLink[] = [];
+  const [rm, up] = await Promise.all([
+    Promise.allSettled(removed.map((id) => actions.deleteAttachment(id))),
+    Promise.allSettled(d.files.map((f) => actions.uploadFile(parentKind, parentId, f.file))),
     // links sequentially keep their order (createdAt)
     (async () => {
-      for (const l of d.links) await actions.addLink(parentKind, parentId, l.url, l.label);
+      for (const l of d.links) await actions.addLink(parentKind, parentId, l.url, l.label).catch(() => failedLinks.push(l));
     })(),
   ]);
+  const files = d.files.filter((f, i) => {
+    if (up[i].status === "rejected") return true;
+    URL.revokeObjectURL(f.url);
+    return false;
+  });
+  return { removed: new Set(removed.filter((_, i) => rm[i].status === "rejected")), files, links: failedLinks };
+}
+
+/** Revoke the blob URLs of a draft that is being dropped. */
+export function revokeDraft(d: AttachmentDraft): void {
+  for (const f of d.files) URL.revokeObjectURL(f.url);
 }
 
 /** Attachments of one parent in display order (files then links, each by creation time). */

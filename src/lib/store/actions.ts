@@ -2,7 +2,7 @@
  * High-level mutations for the UI: optimistic update + API call (+ rollback via the store).
  * Every action returns the server response; it rejects (after rollback) on error so callers can show a message.
  */
-import { api, uuid, type BudgetInput, type CreateNodeInput, type MoveNodeInput, type NodeInput, type UpdatePrintItemInput, type UpdateTaskInput } from "../api";
+import { api, uuid, type BudgetInput, type RequestInit2, type CreateNodeInput, type MoveNodeInput, type NodeInput, type UpdatePrintItemInput, type UpdateTaskInput } from "../api";
 import type { Attachment, OrgNode, ParentKind, PrintItem, Task } from "../types";
 import * as o from "./optimistic";
 import type { AppStore } from "./store";
@@ -138,8 +138,9 @@ export function createActions(store: AppStore) {
     },
 
     // ------------------------------------------------------------ budget
-    updateBudget(patch: BudgetInput) {
-      return m((s) => o.setBudget(s, patch), () => api.updateBudget(patch));
+    /** `keepalive` lets the request outlive the page (flush on `pagehide`). */
+    updateBudget(patch: BudgetInput, opts: RequestInit2 = {}) {
+      return m((s) => o.setBudget(s, patch), () => api.updateBudget(patch, { keepalive: opts.keepalive }));
     },
 
     // ------------------------------------------------------------ attachments (parent must already exist on the server)

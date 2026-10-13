@@ -2,12 +2,47 @@
 /** Print item modal „Tiskovina" / „Nová tiskovina" (prototype §8, print mode). */
 import { useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
-import { AttachmentBox, applyAttachmentDraft, attachmentsOf, emptyDraft, type AttachmentDraft } from "@/features/attachments/AttachmentBox";
+import { DELETED_NOTICE, useCloseWhenDeleted } from "@/components/ui/useCloseWhenDeleted";
+import {
+  AttachmentBox,
+  applyAttachmentDraft,
+  attachmentsOf,
+  draftIsEmpty,
+  emptyDraft,
+  revokeDraft,
+  type AttachmentDraft,
+} from "@/features/attachments/AttachmentBox";
 import { uuid } from "@/lib/api";
 import { ALL } from "@/lib/constants";
 import { columnsOf } from "@/lib/filters";
 import { formatDate, parseDigits } from "@/lib/format";
-import { useActions, useAppState, usePrefs } from "@/lib/store/react";
+import { changedFields, isEmptyPatch } from "@/lib/patch";
+import { useActions, useAppState, usePrefs, useStore } from "@/lib/store/react";
+
+type PrintForm = {
+  typeId: string;
+  columnId: string;
+  title: string;
+  realizationDate: string;
+  description: string;
+  quantity: string;
+  price: string;
+  paid: boolean;
+};
+
+/** Form values → API fields (shared by the save payload and the „unchanged" baseline). */
+function printFields(f: PrintForm) {
+  return {
+    typeId: f.typeId,
+    columnId: f.columnId,
+    title: f.title.trim(),
+    description: f.description.trim(),
+    realizationDate: f.realizationDate || null,
+    quantity: parseDigits(f.quantity),
+    price: parseDigits(f.price),
+    paidByClub: f.paid,
+  };
+}
 
 export function PrintModal({
   id,
@@ -23,6 +58,7 @@ export function PrintModal({
   const state = useAppState();
   const [prefs] = usePrefs();
   const actions = useActions();
+  const store = useStore();
   const cols = columnsOf(state.columns, "print");
   const types = [...state.printTypes].sort((a, b) => a.sortOrder - b.sortOrder);
 
@@ -30,7 +66,7 @@ export function PrintModal({
   const currentId = id ?? savedId;
   const ex = currentId ? state.printItems.find((t) => t.id === currentId) : undefined;
 
-  const [init] = useState(() => {
+  const [init] = useState((): PrintForm => {
     const t = id ? state.printItems.find((x) => x.id === id) : undefined;
     return {
       typeId: t?.typeId ?? (prefs.prFilter !== ALL ? prefs.prFilter : types[0]?.id ?? ""),
@@ -56,10 +92,18 @@ export function PrintModal({
     return () => clearTimeout(t);
   }, [id]);
 
-  const vanished = !!id && !ex;
+  // deleted elsewhere while open → close with a notice (instead of turning into a „new" form)
+  useCloseWhenDeleted(!!currentId && !ex, onClose);
+  const mounted = useRef(true);
   useEffect(() => {
-    if (vanished) onClose();
-  }, [vanished, onClose]);
+    mounted.current = true; // (re)mount — React dev mode runs effects twice
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const close = () => {
+    if (mounted.current) onClose();
+  };
 
   const creator = ex?.createdBy ? state.nodes.find((n) => n.id === ex.createdBy && n.kind === "person") : undefined;
 
@@ -70,37 +114,35 @@ export function PrintModal({
       titleRef.current?.focus();
       return;
     }
-    const fields = {
-      typeId: f.typeId,
-      columnId: f.columnId,
-      title,
-      description: f.description.trim(),
-      realizationDate: f.realizationDate || null,
-      quantity: parseDigits(f.quantity),
-      price: parseDigits(f.price),
-      paidByClub: f.paid,
-    };
+    const fields = printFields(f);
     setBusy(true);
     let targetId = currentId;
     try {
       if (targetId && ex) {
-        await actions.updatePrintItem(targetId, fields);
+        // only the changed fields: a concurrent edit (or a card move) by someone else is kept
+        const patch = changedFields(fields, printFields(init));
+        if (!isEmptyPatch(patch)) await actions.updatePrintItem(targetId, patch);
       } else {
         targetId = uuid();
         await actions.createPrintItem({ ...fields, id: targetId, createdBy: prefs.me });
       }
     } catch {
-      setBusy(false);
+      if (mounted.current) setBusy(false);
       return;
     }
-    try {
-      await applyAttachmentDraft(actions, "print", targetId, draft);
-      onClose();
-    } catch {
-      if (!ex) setSavedId(targetId); // the item exists now — further saves update it
-      setDraft(emptyDraft());
-      setBusy(false);
+    const rest = await applyAttachmentDraft(actions, "print", targetId, draft);
+    if (draftIsEmpty(rest)) return close();
+    // some attachments failed: find out what was saved — and whether the item still exists
+    await store.load();
+    if (!store.getSnapshot().state?.printItems.some((t) => t.id === targetId)) {
+      revokeDraft(rest);
+      store.notify(DELETED_NOTICE);
+      return close();
     }
+    if (!mounted.current) return revokeDraft(rest);
+    if (!ex) setSavedId(targetId); // the item exists now — further saves update it
+    setDraft(rest); // keep only what failed, so „Uložit" retries it
+    setBusy(false);
   };
 
   const duplicate = async () => {
