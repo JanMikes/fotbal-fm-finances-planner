@@ -1,0 +1,59 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { SESSION_COOKIE, verifySessionValue } from "@/server/auth/session";
+import { env } from "@/server/env";
+
+/** Static assets needed by the login page (also excluded via `config.matcher`, checked here as a safety net). */
+function isStaticAsset(pathname: string): boolean {
+  return (
+    pathname.startsWith("/_next/static/") ||
+    pathname.startsWith("/_next/image") ||
+    pathname.startsWith("/fonts/") ||
+    pathname === "/logo-short.svg" ||
+    pathname === "/favicon.ico" ||
+    pathname === "/robots.txt"
+  );
+}
+
+/** Paths reachable without the session cookie. */
+function isPublic(pathname: string): boolean {
+  return (
+    isStaticAsset(pathname) ||
+    pathname === "/login" ||
+    pathname === "/api/health" ||
+    pathname === "/api/auth/login" ||
+    pathname.startsWith("/k/")
+  );
+}
+
+export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  const authed = await verifySessionValue(request.cookies.get(SESSION_COOKIE)?.value, env.sessionSecret);
+
+  if (isPublic(pathname)) {
+    if (pathname === "/login" && authed) return redirect(request, "/");
+    return NextResponse.next();
+  }
+  if (authed) return NextResponse.next();
+
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.json({ error: "unauthorized", message: "Přihlaste se." }, { status: 401 });
+  }
+  return redirect(request, "/login");
+}
+
+/**
+ * Absolute redirect (the proxy runtime requires absolute Location URLs). Honours X-Forwarded-Proto/Host so the
+ * redirect keeps the public scheme/host behind Traefik.
+ */
+function redirect(request: NextRequest, pathname: string) {
+  const fallback = new URL(request.url);
+  const proto = request.headers.get("x-forwarded-proto")?.split(",")[0].trim() || fallback.protocol.replace(":", "");
+  const host = request.headers.get("x-forwarded-host")?.split(",")[0].trim() || request.headers.get("host") || fallback.host;
+  const res = NextResponse.redirect(new URL(pathname, `${proto === "https" ? "https" : "http"}://${host}`), 307);
+  res.headers.set("Cache-Control", "no-store");
+  return res;
+}
+
+export const config = {
+  matcher: ["/((?!_next/static|_next/image|fonts/|favicon.ico|logo-short.svg|robots.txt).*)"],
+};

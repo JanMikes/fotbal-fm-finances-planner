@@ -1,0 +1,22 @@
+# local reference material (contains real names / screenshots) — not published
+docs/analysis/video-frames/
+docs/analysis/prototype-assets/Marketing ukoly.html
+node_modules/
+.next/
+.env
+.env.*
+!.env.example
+coverage/
+playwright-report/
+test-results/
+/data/
+.DS_Store
+*.tsbuildinfo
+next-env.d.ts
+/out/
+/build/
+/blob-report/
+/playwright/.cache/
+compose.override.yaml
+npm-debug.log*
+/dist/

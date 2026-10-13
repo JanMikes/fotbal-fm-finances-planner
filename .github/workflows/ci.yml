@@ -1,0 +1,243 @@
+# =============================================================================
+# CI + release
+# =============================================================================
+# On every pull request and every push to main:
+#   checks       npm ci, lint, typecheck, unit tests
+#   integration  API integration tests against a real postgres:18 service
+#   e2e          builds the PRODUCTION image, runs it next to Postgres exactly as
+#                lily does (migrate one-off, then the server, uploads on a named
+#                volume, healthcheck via wget on 127.0.0.1) and runs Playwright
+# On push to main, once all three are green:
+#   ship         TheDevs-cz/ci _ship.yml@v1: build + push
+#                ghcr.io/janmikes/fotbal-fm-finances-planner (sha-<git sha>, main,
+#                latest), then HMAC-POST the deploy hook on lily
+#                (https://deploy.lily.srv.thedevs.cz/hooks/fotbal-fm-finances-planner).
+#
+# The box PULLS the image; this repo holds NO SSH key and no runtime secrets.
+# The production compose.yaml + deploy.sh live in TheDevs-cz/lily.srv
+# (apps/fotbal-fm-finances-planner). See docs/DEPLOYMENT.md.
+#
+# Secrets: only DEPLOY_WEBHOOK_SECRET (the per-app HMAC key). It is passed
+# EXPLICITLY, not via `secrets: inherit`, because the shared workflow lives under a
+# different owner (TheDevs-cz) and inherit does not cross owners. GITHUB_TOKEN is
+# provided automatically (GHCR push).
+#
+# PUBLIC repo: `pull_request` only (never pull_request_target), so fork PRs run
+# with a read-only token and no secrets; `ship` never runs for a PR.
+# Only first-party actions (actions/*), pinned by major tag like the sibling repos.
+# =============================================================================
+name: CI
+
+on:
+    push:
+        branches:
+            - main
+    pull_request:
+
+permissions:
+    contents: read
+
+# One run per ref. PR runs are superseded by newer pushes; main runs are never
+# cancelled mid-flight (a half-finished ship/deploy must complete).
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+    NODE_VERSION: '24'
+    # Dev-only credentials (the same defaults as compose.yml). NOT production values.
+    APP_PASSWORD: dev-password
+    APP_ACCESS_TOKEN: dev-token
+    SESSION_SECRET: ci-session-secret-not-used-in-production-0000000000000000
+
+jobs:
+    checks:
+        name: Lint, typecheck, unit tests
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        steps:
+            -   name: Checkout
+                uses: actions/checkout@v7
+
+            -   name: Setup Node.js
+                uses: actions/setup-node@v7
+                with:
+                    node-version: ${{ env.NODE_VERSION }}
+                    cache: npm
+
+            -   name: Install dependencies
+                run: npm ci
+
+            -   name: Lint
+                run: npm run lint
+
+            -   name: Typecheck
+                run: npm run typecheck
+
+            -   name: Unit tests
+                run: npm test
+
+    integration:
+        name: Integration tests (Postgres 18)
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        services:
+            postgres:
+                image: postgres:18-alpine
+                env:
+                    POSTGRES_USER: planner
+                    POSTGRES_PASSWORD: planner
+                    POSTGRES_DB: planner_test
+                ports:
+                    - 5432:5432
+                options: >-
+                    --health-cmd "pg_isready -h 127.0.0.1 -U planner -d planner_test"
+                    --health-interval 2s
+                    --health-timeout 5s
+                    --health-retries 30
+        env:
+            # Empty database; the integration suite runs the migrations itself.
+            DATABASE_URL: postgresql://planner:planner@127.0.0.1:5432/planner_test
+        steps:
+            -   name: Checkout
+                uses: actions/checkout@v7
+
+            -   name: Setup Node.js
+                uses: actions/setup-node@v7
+                with:
+                    node-version: ${{ env.NODE_VERSION }}
+                    cache: npm
+
+            -   name: Install dependencies
+                run: npm ci
+
+            -   name: Prepare upload dir
+                run: |
+                    mkdir -p "$RUNNER_TEMP/uploads"
+                    echo "UPLOAD_DIR=$RUNNER_TEMP/uploads" >> "$GITHUB_ENV"
+
+            -   name: Integration tests
+                run: npm run test:integration
+
+    e2e:
+        name: E2E (production image)
+        runs-on: ubuntu-latest
+        timeout-minutes: 25
+        env:
+            IMAGE: fotbal-fm-finances-planner:ci
+            DB_URL_IN_NET: postgresql://planner:planner@e2e-db:5432/planner?sslmode=disable
+            BASE_URL: http://127.0.0.1:3000
+        steps:
+            -   name: Checkout
+                uses: actions/checkout@v7
+
+            -   name: Build the production image
+                run: docker build --pull -t "$IMAGE" .
+
+            -   name: Start Postgres 18
+                run: |
+                    docker network create e2e
+                    docker run -d --name e2e-db --network e2e \
+                      -e POSTGRES_USER=planner -e POSTGRES_PASSWORD=planner -e POSTGRES_DB=planner \
+                      --health-cmd "pg_isready -h 127.0.0.1 -U planner -d planner" \
+                      --health-interval 2s --health-retries 30 \
+                      postgres:18-alpine
+                    for _ in $(seq 1 60); do
+                      [ "$(docker inspect -f '{{.State.Health.Status}}' e2e-db)" = healthy ] && exit 0
+                      sleep 1
+                    done
+                    docker logs e2e-db; exit 1
+
+            -   name: Migrate (the lily one-off, run twice to prove it is idempotent)
+                run: |
+                    for _ in 1 2; do
+                      docker run --rm --network e2e -e DATABASE_URL="$DB_URL_IN_NET" "$IMAGE" node migrate.mjs
+                    done
+
+            -   name: Start the app (as on lily)
+                run: |
+                    # Fresh EMPTY named volume, like the external volume on the box: the
+                    # image's /data/uploads ownership (uid 1001) must carry over to it.
+                    docker volume create e2e_uploads
+                    docker run -d --name e2e-app --network e2e -p 127.0.0.1:3000:3000 \
+                      --memory 512m --security-opt no-new-privileges:true \
+                      -v e2e_uploads:/data/uploads \
+                      -e NODE_ENV=production \
+                      -e DATABASE_URL="$DB_URL_IN_NET" \
+                      -e UPLOAD_DIR=/data/uploads \
+                      -e APP_PASSWORD -e APP_ACCESS_TOKEN -e SESSION_SECRET \
+                      "$IMAGE"
+                    for i in $(seq 1 60); do
+                      curl -fsS "$BASE_URL/api/health" >/dev/null 2>&1 && break
+                      [ "$i" = 60 ] && { docker logs e2e-app; exit 1; }
+                      sleep 1
+                    done
+                    echo "health OK from the host"
+
+            -   name: Assert the runtime contract lily relies on
+                run: |
+                    # The compose healthcheck: busybox wget against 127.0.0.1 (D42 IPv6 trap).
+                    docker exec e2e-app wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/health
+                    # Runs as uid 1001 and can write the uploads volume.
+                    test "$(docker exec e2e-app id -u)" = 1001
+                    docker exec e2e-app sh -c 'touch /data/uploads/.ci-write-test && rm /data/uploads/.ci-write-test'
+                    # Contract H backup.files streams `tar` from inside the container.
+                    docker exec e2e-app sh -c 'tar -cf - /data/uploads >/dev/null'
+                    # The health endpoint must answer without auth.
+                    curl -fsS -o /dev/null -w 'GET /api/health -> %{http_code}\n' "$BASE_URL/api/health"
+
+            -   name: Setup Node.js
+                uses: actions/setup-node@v7
+                with:
+                    node-version: ${{ env.NODE_VERSION }}
+                    cache: npm
+
+            -   name: Install dependencies
+                run: npm ci
+
+            -   name: Install Playwright (Chromium)
+                run: npx playwright install --with-deps chromium
+
+            -   name: Playwright e2e
+                run: npm run test:e2e
+
+            -   name: App logs
+                if: failure()
+                run: docker logs e2e-app || true
+
+            -   name: Upload Playwright report
+                if: failure()
+                uses: actions/upload-artifact@v7
+                with:
+                    name: playwright-report
+                    path: |
+                        playwright-report/
+                        test-results/
+                    retention-days: 7
+                    if-no-files-found: ignore
+
+    ship:
+        name: Ship to lily
+        needs:
+            - checks
+            - integration
+            - e2e
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: TheDevs-cz/ci/.github/workflows/_ship.yml@v1
+        permissions:
+            contents: read
+            packages: write
+        secrets:
+            DEPLOY_WEBHOOK_SECRET: ${{ secrets.DEPLOY_WEBHOOK_SECRET }}
+        with:
+            app: fotbal-fm-finances-planner                       # hook id == /srv/<app> == compose project
+            image: ghcr.io/janmikes/fotbal-fm-finances-planner    # explicit + lowercase (repo owner is JanMikes)
+            context: .
+            dockerfile: Dockerfile
+            deploy_host: lily.srv.thedevs.cz
+            # Deploy the immutable sha-<git sha> tag this build pushed, not "main".
+            deploy_sha: true
+            # Fire-and-forget (green on QUEUED): awaiting needs a per-app checks PAT on
+            # the box (lily backlog). When it is seeded: set true and add
+            # `statuses: read` to this job's permissions.
+            await_deploy: false

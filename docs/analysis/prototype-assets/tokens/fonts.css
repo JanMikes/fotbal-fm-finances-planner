@@ -1,0 +1,11 @@
+/* Montserrat — the club's single typeface family (2025 identity).
+   Weights supplied as OTF by the club. */
+@font-face{font-family:"Montserrat";font-weight:100;font-style:normal;font-display:swap;src:url("../assets/fonts/Montserrat-Thin.otf") format("opentype")}
+@font-face{font-family:"Montserrat";font-weight:200;font-style:normal;font-display:swap;src:url("../assets/fonts/Montserrat-ExtraLight.otf") format("opentype")}
+@font-face{font-family:"Montserrat";font-weight:300;font-style:normal;font-display:swap;src:url("../assets/fonts/Montserrat-Light.otf") format("opentype")}
+@font-face{font-family:"Montserrat";font-weight:400;font-style:normal;font-display:swap;src:url("../assets/fonts/Montserrat-Regular.otf") format("opentype")}
+@font-face{font-family:"Montserrat";font-weight:500;font-style:normal;font-display:swap;src:url("../assets/fonts/Montserrat-Medium.otf") format("opentype")}
+@font-face{font-family:"Montserrat";font-weight:600;font-style:normal;font-display:swap;src:url("../assets/fonts/Montserrat-SemiBold.otf") format("opentype")}
+@font-face{font-family:"Montserrat";font-weight:700;font-style:normal;font-display:swap;src:url("../assets/fonts/Montserrat-Bold.otf") format("opentype")}
+@font-face{font-family:"Montserrat";font-weight:800;font-style:normal;font-display:swap;src:url("../assets/fonts/Montserrat-ExtraBold.otf") format("opentype")}
+@font-face{font-family:"Montserrat";font-weight:900;font-style:normal;font-display:swap;src:url("../assets/fonts/Montserrat-Black.otf") format("opentype")}

@@ -1,0 +1,47 @@
+/* ============================================================
+   FOTBAL FM — TYPOGRAPHY
+   Single family: Montserrat. Print-first scale.
+   Headlines: heavy weights, UPPERCASE, tight tracking — the
+   NHL-inspired, industrial voice of the 2025 identity.
+   ============================================================ */
+:root{
+  --font-family: "Montserrat", "Helvetica Neue", Arial, sans-serif;
+  --font-display: var(--font-family);
+  --font-body:    var(--font-family);
+
+  /* Weights @kind font */
+  --fw-thin:     100; /* @kind font */
+  --fw-extralight:200; /* @kind font */
+  --fw-light:    300; /* @kind font */
+  --fw-regular:  400; /* @kind font */
+  --fw-medium:   500; /* @kind font */
+  --fw-semibold: 600; /* @kind font */
+  --fw-bold:     700; /* @kind font */
+  --fw-extrabold:800; /* @kind font */
+  --fw-black:    900; /* @kind font */
+
+  /* Type scale (print pt-equivalent, expressed in px @96dpi) */
+  --fs-display:  64px;  /* section splash / cover */
+  --fs-h1:       40px;
+  --fs-h2:       30px;
+  --fs-h3:       22px;
+  --fs-h4:       17px;
+  --fs-body-lg:  16px;
+  --fs-body:     14px;
+  --fs-caption:  12px;
+  --fs-micro:    10px;
+
+  /* Line heights */
+  --lh-tight:  1.02; /* @kind other */
+  --lh-snug:   1.15; /* @kind other */
+  --lh-normal: 1.5; /* @kind other */
+  --lh-relaxed:1.65; /* @kind other */
+
+  /* Letter spacing — heavy uppercase headlines run tight;
+     small labels/eyebrows run wide. */
+  --ls-display: -0.02em; /* @kind other */
+  --ls-head:    -0.01em; /* @kind other */
+  --ls-body:    0; /* @kind other */
+  --ls-label:   0.14em; /* @kind other */
+  --ls-tag:     0.06em; /* @kind other */
+}

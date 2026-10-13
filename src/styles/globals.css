@@ -1,0 +1,4 @@
+/* Global stylesheet: design-system tokens + the prototype CSS verbatim (see docs/analysis/prototype.md). */
+@import "./fm/styles.css";
+@import "./fm/prototype-app.css";
+@import "./app-extra.css";

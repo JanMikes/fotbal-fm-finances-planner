@@ -1,0 +1,14 @@
+/* ============================================================
+   FOTBAL FM — BACKGROUNDS
+   The identity ships two full-bleed textured backgrounds: a dark
+   navy and a light grey, both carrying the angular "shard" plates
+   and star-halftone texture. Use as full-page backing for covers,
+   section dividers and catalog spreads.
+   ============================================================ */
+:root{
+  --bg-dark-img:  url("../assets/bg-dark.png");
+  --bg-light-img: url("../assets/bg-light.png");
+}
+/* Utility classes consumers can apply directly */
+.fm-bg-dark{background:var(--fm-navy) var(--bg-dark-img) center/cover no-repeat;color:var(--text-on-dark)}
+.fm-bg-light{background:var(--fm-white) var(--bg-light-img) center/cover no-repeat;color:var(--text-body)}

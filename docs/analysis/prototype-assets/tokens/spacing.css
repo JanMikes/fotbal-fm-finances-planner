@@ -1,0 +1,38 @@
+/* ============================================================
+   FOTBAL FM — SPACING & LAYOUT
+   Clean, orderly grids. 4px base rhythm.
+   ============================================================ */
+:root{
+  --sp-0:  0; /* @kind spacing */
+  --sp-1:  4px;
+  --sp-2:  8px;
+  --sp-3:  12px;
+  --sp-4:  16px;
+  --sp-5:  20px;
+  --sp-6:  24px;
+  --sp-8:  32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+  --sp-20: 80px;
+  --sp-24: 96px;
+
+  /* Radii — the identity is angular/industrial; radii stay small.
+     Sharp corners are the default; slight rounding on soft chips. */
+  --radius-none: 0;
+  --radius-sm:   3px;
+  --radius-md:   6px;
+  --radius-lg:   10px;
+  --radius-pill: 999px;
+
+  /* Print page geometry (A4 portrait / 16:9 slide) */
+  --page-a4-w: 794px;   /* 210mm @96dpi */
+  --page-a4-h: 1123px;  /* 297mm @96dpi */
+  --page-margin: 56px;
+  --slide-w: 1280px;
+  --slide-h: 720px;
+
+  /* Grid gutters */
+  --gutter: 24px;
+  --gutter-tight: 16px;
+}

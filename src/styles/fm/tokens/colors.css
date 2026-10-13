@@ -1,0 +1,66 @@
+/* ============================================================
+   FOTBAL FM — COLOR SYSTEM
+   Klubové barvy: modrá & bílá. Industrial "valcíř" heritage.
+   Base brand values are the club's official spec — do not alter.
+   ============================================================ */
+:root{
+  /* --- Brand core (official) --- */
+  --fm-blue:        #0099cf;   /* bright signal blue — primary accent */
+  --fm-navy:        #1b2341;   /* deep navy — primary dark surface / ink */
+  --fm-steel:       #00588e;   /* mid steel blue — secondary accent */
+  --fm-white:       #ffffff;   /* white */
+  --fm-grey:        #adadad;   /* neutral grey — captions, dividers, secondary */
+
+  /* --- Blue ramp (derived, harmonic) --- */
+  --blue-050: #e8f6fc;
+  --blue-100: #c4e9f6;
+  --blue-200: #8fd6ef;
+  --blue-300: #4fbde4;
+  --blue-400: #0099cf;   /* = --fm-blue */
+  --blue-500: #007fb4;
+  --blue-600: #00588e;   /* = --fm-steel */
+  --blue-700: #093f6b;
+  --blue-800: #12304f;
+  --blue-900: #1b2341;   /* = --fm-navy */
+  --blue-950: #12172b;
+
+  /* --- Neutral / steel-grey ramp --- */
+  --grey-050: #f6f7f8;
+  --grey-100: #eceef0;
+  --grey-200: #dcdfe3;
+  --grey-300: #c4c8ce;
+  --grey-400: #adadad;   /* = --fm-grey */
+  --grey-500: #8a8d92;
+  --grey-600: #63666b;
+  --grey-700: #454850;
+  --grey-800: #2a2d38;
+  --grey-900: #191c26;
+  --ink:      #12141c;
+
+  /* --- Semantic aliases --- */
+  --text-strong:    var(--fm-navy);
+  --text-body:      var(--grey-800);
+  --text-muted:     var(--grey-500);
+  --text-on-dark:   var(--fm-white);
+  --text-on-dark-muted: rgba(255,255,255,0.66);
+  --text-accent:    var(--fm-blue);
+
+  --surface-page:   var(--fm-white);
+  --surface-card:   var(--fm-white);
+  --surface-subtle: var(--grey-050);
+  --surface-dark:   var(--fm-navy);
+  --surface-dark-2: var(--blue-800);
+  --surface-accent: var(--fm-blue);
+
+  --border-hairline: var(--grey-200);
+  --border-strong:   var(--grey-300);
+  --border-on-dark:  rgba(255,255,255,0.14);
+
+  --accent-primary:   var(--fm-blue);
+  --accent-secondary: var(--fm-steel);
+
+  /* Price / highlight tag */
+  --price-fg: var(--fm-navy);
+  --tag-fg:   var(--fm-white);
+  --tag-bg:   var(--fm-blue);
+}

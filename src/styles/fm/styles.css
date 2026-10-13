@@ -1,0 +1,7 @@
+/* Fotbal FM — design system tokens (from the prototype design system).
+   backgrounds.css is intentionally not imported (unused, references missing images). */
+@import "./tokens/fonts.css";
+@import "./tokens/colors.css";
+@import "./tokens/typography.css";
+@import "./tokens/spacing.css";
+@import "./tokens/effects.css";

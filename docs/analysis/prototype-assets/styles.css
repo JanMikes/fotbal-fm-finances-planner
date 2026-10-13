@@ -1,0 +1,8 @@
+/* Fotbal FM — global stylesheet entry point.
+   Consumers link THIS one file. Import-only; no rules here. */
+@import "./tokens/fonts.css";
+@import "./tokens/colors.css";
+@import "./tokens/typography.css";
+@import "./tokens/spacing.css";
+@import "./tokens/effects.css";
+@import "./tokens/backgrounds.css";
