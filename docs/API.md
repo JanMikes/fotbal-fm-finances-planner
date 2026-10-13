@@ -134,7 +134,7 @@ Items created later with a date in a closed year are **not** auto-archived (DECI
 
 ```jsonc
 {
-  "year": 2026, "years": [2026, 2025],          // years with dated items ∪ current year, DESC
+  "year": 2026, "years": [2026, 2025],          // years with dated items ∪ closed years ∪ current year, DESC
   "closedAt": "…" | null,
   "itemCount": 12, "total": 54000, "paid": 30000, "owed": 24000, "quantity": 3500,
   "paidPct": 56, "owedPct": 44,                  // owedPct = 100 - paidPct (0 when total = 0)

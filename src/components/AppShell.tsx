@@ -1,89 +1,71 @@
 "use client";
 /**
- * PHASE-1 PLACEHOLDER app shell (header, tabs, identity select). Phase 2 replaces the <main> content with the
- * real boards / org view. Markup and class names follow prototype.md §2 / §6.
+ * App shell (prototype §2): `.app` (header + active tab) and its sibling `#modalRoot` (modals + yearly report, kept
+ * outside `.app` so the print stylesheet `body>.app{display:none}` prints only the report).
  */
-import { StoreGate, StoreProvider, useAppState, usePrefs, useStoreSnapshot } from "@/lib/store/react";
-import { personsInOrder } from "@/lib/tree";
-import type { View } from "@/lib/prefs";
-
-const TABS: Array<{ view: View; label: string }> = [
-  { view: "board", label: "Úkoly" },
-  { view: "print", label: "Tiskoviny" },
-  { view: "org", label: "Struktura týmu" },
-];
+import { PrintModal } from "@/features/print/PrintModal";
+import { PrintTab } from "@/features/print/PrintTab";
+import { PrintTypesModal } from "@/features/print/PrintTypesModal";
+import { PrintReport } from "@/features/print-report/PrintReport";
+import { TaskModal } from "@/features/tasks/TaskModal";
+import { TasksTab } from "@/features/tasks/TasksTab";
+import { TeamTab } from "@/features/team/TeamTab";
+import { StoreGate, StoreProvider, usePrefs } from "@/lib/store/react";
+import { Header } from "./Header";
+import { StatusLayer } from "./StatusLayer";
+import { UiProvider, useUi } from "./UiContext";
 
 export function AppShell() {
   return (
     <StoreProvider>
-      <div className="app">
-        <Header />
-        <StoreGate>
-          <Placeholder />
-        </StoreGate>
-      </div>
-      <div id="modalRoot" />
+      <UiProvider>
+        <div className="app">
+          <Header />
+          <StoreGate>
+            <MainView />
+          </StoreGate>
+        </div>
+        <div id="modalRoot">
+          <StoreGate loading={null} error={() => null}>
+            <ReportHost />
+            <ModalHost />
+          </StoreGate>
+        </div>
+        <StatusLayer />
+      </UiProvider>
     </StoreProvider>
   );
 }
 
-function Header() {
-  const [prefs, updatePrefs] = usePrefs();
-  return (
-    <header className="top">
-      <div className="brand">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo-short.svg" alt="Fotbal FM" />
-        <div>
-          <h1>Marketingový plán úkolů</h1>
-        </div>
-      </div>
-      <nav className="tabs" id="tabs">
-        {TABS.map((t) => (
-          <button key={t.view} type="button" className={prefs.view === t.view ? "on" : undefined} onClick={() => updatePrefs({ view: t.view })}>
-            {t.label}
-          </button>
-        ))}
-      </nav>
-      <div className="tools">
-        <IdentitySelect />
-        <button className="btn primary" id="btnNew" type="button">
-          {prefs.view === "print" ? "+ Nová tiskovina" : "+ Nový úkol"}
-        </button>
-      </div>
-    </header>
-  );
-}
-
-function IdentitySelect() {
-  const snap = useStoreSnapshot();
-  const [prefs, updatePrefs] = usePrefs();
-  const persons = snap.state ? personsInOrder(snap.state.nodes) : [];
-  return (
-    <label className="who">
-      <span>Přihlášen</span>
-      <select id="me" value={prefs.me ?? ""} onChange={(e) => updatePrefs({ me: e.target.value || null })}>
-        {persons.length === 0 && <option value="">—</option>}
-        {persons.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-function Placeholder() {
-  const state = useAppState();
+function MainView() {
   const [prefs] = usePrefs();
+  const { reportOpen } = useUi();
+  if (prefs.view === "org") return <TeamTab />;
+  if (prefs.view === "print") return reportOpen ? null : <PrintTab />;
+  return <TasksTab />;
+}
+
+function ReportHost() {
+  const [prefs] = usePrefs();
+  const { reportOpen, setReportOpen } = useUi();
+  if (!reportOpen || prefs.view !== "print") return null;
   return (
-    <main className="board" id="board" data-phase1-placeholder="">
-      <div className="app-msg">
-        {prefs.view === "board" && `Úkoly: ${state.tasks.length}`}
-        {prefs.view === "print" && `Tiskoviny: ${state.printItems.filter((i) => !i.archived).length}`}
-        {prefs.view === "org" && `Struktura týmu: ${state.nodes.length} uzlů`}
-      </div>
-    </main>
+    <div className="report-host">
+      <PrintReport onBack={() => setReportOpen(false)} />
+    </div>
   );
+}
+
+function ModalHost() {
+  const { modal, closeModal, openTask, openPrint } = useUi();
+  if (!modal) return null;
+  const key = `${modal.kind}:${modal.seq}`;
+  switch (modal.kind) {
+    case "task":
+      return <TaskModal key={key} id={modal.id} columnId={modal.columnId} onClose={closeModal} onOpenTask={(id) => openTask(id)} />;
+    case "print":
+      return <PrintModal key={key} id={modal.id} columnId={modal.columnId} onClose={closeModal} onOpenItem={(id) => openPrint(id)} />;
+    case "types":
+      return <PrintTypesModal key={key} onClose={closeModal} />;
+  }
 }

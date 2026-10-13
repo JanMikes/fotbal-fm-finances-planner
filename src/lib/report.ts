@@ -31,7 +31,7 @@ export interface ReportType {
 
 export interface YearReport {
   year: number;
-  /** Years with any dated item ∪ current year, DESC. */
+  /** Years with any dated item ∪ closed years ∪ current year, DESC. */
   years: number[];
   closedAt: string | null;
   /** Number of items (archived + active) with a realization date in the year. */
@@ -71,9 +71,13 @@ export function buildYearReport(args: {
   const typeName = new Map(types.map((t) => [t.id, t.name]));
   const bySort = (a: PrintItem, b: PrintItem) => a.sortOrder - b.sortOrder;
 
-  const years = [...new Set([...items.filter((i) => i.realizationDate).map((i) => Number(i.realizationDate!.slice(0, 4))), currentYear])].sort(
-    (a, b) => b - a,
-  );
+  const years = [
+    ...new Set([
+      ...items.filter((i) => i.realizationDate).map((i) => Number(i.realizationDate!.slice(0, 4))),
+      ...closures.map((c) => c.year),
+      currentYear,
+    ]),
+  ].sort((a, b) => b - a);
   const its = items.filter((i) => i.realizationDate && Number(i.realizationDate.slice(0, 4)) === year).sort(bySort);
   const noDateCount = items.filter((i) => !i.realizationDate && !i.archived).length;
   const price = (i: PrintItem) => i.price || 0;

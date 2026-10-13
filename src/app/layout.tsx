@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import "@/styles/globals.css";
+import "@/components/components.css";
 
 export const metadata: Metadata = {
   title: "Marketing — úkoly | Fotbal FM",

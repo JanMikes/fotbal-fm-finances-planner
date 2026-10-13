@@ -6,10 +6,8 @@ with the resolutions in `docs/DECISIONS.md`.
 
 ## What to replace
 
-`src/components/AppShell.tsx` is a **placeholder**: header (logo, title, tabs, identity select, „+ Nový úkol" button)
-and a `<main data-phase1-placeholder>` that only prints counts. Replace the `<Placeholder/>` with the real views
-(`Board` for tasks/print, `OrgView`, `YearReport`, modals). Keep `<StoreProvider>` at the top and render the data
-UI inside `<StoreGate>`. `#modalRoot` (sibling of `.app`) exists for portals — modals and the yearly report go
+`src/components/AppShell.tsx` (Phase 2: real shell, see „Shell & shared UI" below) keeps `<StoreProvider>` at the
+top and renders the data UI inside `<StoreGate>`. `#modalRoot` (sibling of `.app`) exists for portals — modals and the yearly report go
 there so the print stylesheet (`body>.app{display:none}`) keeps working.
 
 Everything else (`src/lib/**`, `src/server/**`, API) is the foundation — extend it, don't fork it. If you must
@@ -125,9 +123,30 @@ server-side too (`https://` prefix), but use `normalizeUrl` for the immediate UI
   (`npm run test:integration`, needs a `*test*` Postgres DB); flows → Playwright in `tests/e2e`. The e2e smoke tests
   check the header text „Marketingový plán úkolů" and the „Úkoly" tab button — keep those (or update the tests).
 
+## Shell & shared UI (Phase 2, boards)
+
+| Module | Purpose |
+|---|---|
+| `src/components/AppShell.tsx` | `StoreProvider` → `UiProvider` → `.app` (`Header` + active tab: `TasksTab` / `PrintTab` / `TeamTab`) and the sibling `#modalRoot` (yearly report host + the one open modal), plus `StatusLayer`. |
+| `src/components/UiContext.tsx` | `useUi()` → `modal` + `openTask(id \| null, columnId?)`, `openPrint(…)`, `openTypes()`, `closeModal()`, `reportOpen` / `setReportOpen`. One modal at a time (prototype `#modalRoot`). |
+| `src/components/Header.tsx` | Tabs (switching closes the report), identity select, „+ Nový úkol" / „+ Nová tiskovina" (org tab → jumps to Úkoly). Publishes the header bottom as CSS var `--fm-top-h`. |
+| `src/components/StatusLayer.tsx` | Error toast for `snapshot.error` (6 s), subtle „Offline" pill after 4 s without SSE, silent refetch on `visibilitychange`. |
+| `src/components/ui/Modal.tsx` | Prototype modal shell (`.ov > .modal > .mh + body + .mf`): Esc, pointerdown on overlay, × close. Render it from `ModalHost` (inside `#modalRoot`). |
+| `src/components/ui/Avatar.tsx` | `.av` circle (`lead` ring, „–" when unassigned, tooltip „Vedoucí/Zodpovědný: …"). |
+| `src/components/components.css` | Non-prototype CSS for the shell (report host, toast, offline pill); imported in `layout.tsx`. |
+| `src/features/board/Board.tsx` | Generic kanban (`mode: "tasks" \| "print"`, `visible` map, `renderCard`, `columnExtra`, optional `columnEditing`). Prototype DOM/classes. |
+| `src/features/board/useBoardDnd.ts` | Pointer-event drag & drop (prototype §7.7): mouse > 5 px, touch hold 220 ms + `vibrate(15)`, live placeholder `.ph`, ghost portal `body > .card.ghost`, `.col.over`, autoscroll, `onDrop(id, columnId, beforeIdOfNextVisible)`, click swallowed 50 ms after a drag. |
+| `src/features/board/DueChip.tsx` | `.due` chip from `dueInfo`. |
+| `src/features/attachments/AttachmentBox.tsx` | „Přílohy a odkazy" box with a draft (`AttachmentDraft`) applied after save via `applyAttachmentDraft`; `attachmentsOf`, `attachmentCounts`. |
+| `src/features/tasks/*`, `src/features/print/*` | Tabs, filter bars, cards, `TaskModal`, `PrintModal`, `PrintTypesModal`. |
+
+The yearly report (`PrintReport`) is rendered inside `#modalRoot > .report-host` (fixed below the header, `transform`
+makes it the containing block of `.yv`); the Tiskoviny bar/board are not rendered while it is open.
+Local parallel dev servers: `NEXT_DIST_DIR=.next/<name> next dev -p <port>` (optional `distDir` override in `next.config.ts`).
+
 ## Known gaps / TODO for Phase 2
 
-- All feature UI: boards with pointer-event drag & drop (prototype §7.7, 220 ms touch hold), modals, org tree +
-  drag & drop, budget box, yearly report + print stylesheet, info popover, toasts for `snapshot.error`.
+- Boards, task/print modals, type management, toasts and the offline hint are done (see „Shell & shared UI").
+  Org tree / budget box / info popover (`src/features/team`) and the yearly report (`src/features/print-report`) are
+  built separately.
 - Remove the dead CSS listed in prototype.md §18.
-- Optional: render `snapshot.online === false` as a subtle "offline" hint.

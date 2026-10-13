@@ -1,0 +1,16 @@
+/* Struktura týmu — additions on top of the prototype CSS (prototype-app.css). */
+
+/* Splátka row: label + small „od [měsíc]" month input (DECISIONS #2) */
+.cb-l.tm-pay-l{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.cb-l.tm-pay-l>label{cursor:pointer}
+.tm-from{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:none;color:var(--grey-600)}
+.tm-from input{border:1px solid var(--grey-300);border-radius:3px;min-height:30px;padding:0 6px;font:inherit;font-size:12px;font-weight:600;color:var(--fm-navy);background:#fff;max-width:150px}
+.tm-from input:focus{outline:2px solid var(--blue-200);border-color:var(--fm-blue)}
+@media (max-width:760px){
+.cb-row.tm-pay{flex-wrap:wrap;row-gap:6px}
+.tm-pay .cb-l.tm-pay-l{display:contents}
+.tm-pay .tm-from{order:3;flex-basis:100%}
+}
+
+/* `.f.w` full-width field helper is part of the prototype CSS; the ghost must not show focus rings */
+.onode.ghost:focus{outline:none}

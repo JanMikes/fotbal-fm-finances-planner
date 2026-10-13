@@ -1,0 +1,32 @@
+/*
+ * Yearly print report — additions on top of the prototype CSS (prototype-app.css has the screen + base print rules).
+ *
+ * Deliberate change vs the prototype (prototype.md §15 "Nuance"): media queries use the printed page width
+ * (A4 portrait ≈ 718 CSS px), so the ≤1000px / ≤760px screen rules also hit the printout (2-column KPIs, hidden
+ * chart values, list rows without type and quantity). For print we restore a full-information A4 layout:
+ * 4 KPI tiles in a row (smaller values so they fit), full-width chart with value labels, full-width type
+ * breakdown and list rows with name · type · ks · price.
+ */
+@media print {
+  @page { size: A4 portrait; margin: 12mm; }
+  html, body { height: auto; background: #fff; }
+  .yv { inset: auto; display: block; background: #fff; }
+  .yv .yv-bar { padding: 0 0 10px; border-bottom: 0; }
+  .yv .yv-bar .sub { padding: 0; }
+  .yv .yv-t { font-size: 18px; }
+  .yv .yv-b { padding: 0; gap: 12px; }
+  .yv .yv-kpi { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .yv .kp { padding: 12px 14px; }
+  .yv .kp span { font-size: 9px; letter-spacing: .08em; }
+  .yv .kp b { font-size: 20px; }
+  .yv .kp.main b { font-size: 22px; }
+  .yv .kp i { font-size: 10px; }
+  .yv .yv-chart, .yv .yv-types { grid-column: 1 / -1; }
+  .yv .cols { height: 170px; gap: 6px; }
+  .yv .mc .v { display: block; font-size: 9px; }
+  .yv .yv-card { padding: 14px 16px; }
+  .yv .yv-chart { padding-bottom: 32px; }
+  .yv .yv-r { grid-template-columns: minmax(0, 1fr) 120px 70px 100px; font-size: 12px; padding: 6px 12px; }
+  .yv .yv-r .ty, .yv .yv-r .q { display: block; }
+  .yv .yv-mh { padding: 8px 12px; }
+}
