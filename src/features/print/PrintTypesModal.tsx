@@ -1,13 +1,12 @@
 "use client";
 /** „Typy médií" management dialog (prototype §9.5): rename (blur / Enter), delete (min 1, confirm + move), add. */
-import { useRef, type CSSProperties } from "react";
+import { useRef } from "react";
+import { Button } from "@/components/ui/Button";
+import { Field } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
+import { plural, pluralize } from "@/lib/format";
 import { useActions, useAppState } from "@/lib/store/react";
-
-// inline styles copied verbatim from the prototype markup
-const ROW_INPUT: CSSProperties = { border: "1px solid var(--grey-200)", borderRadius: 3, padding: "0 10px", minHeight: 40, fontSize: 15, fontWeight: 700, color: "var(--fm-navy)" };
-const ROW_BTN: CSSProperties = { minHeight: 36, padding: "0 10px" };
-const NEW_INPUT: CSSProperties = { border: "1px solid var(--grey-300)", borderRadius: 3, padding: "0 12px", minHeight: 44, fontSize: 15 };
+import "./print.css";
 
 const noop = () => undefined;
 
@@ -38,7 +37,8 @@ export function PrintTypesModal({ onClose }: { onClose: () => void }) {
     }
     const n = countOf(id);
     const rest = types.filter((t) => t.id !== id);
-    if (n && !window.confirm(`Typ „${name}“ používá ${n} tiskovin. Přesunout je pod „${rest[0].name}“ a typ smazat?`)) return;
+    const what = n === 1 ? "1 tiskovinu. Přesunout ji" : `${n} ${plural(n, "tiskovinu", "tiskoviny", "tiskovin")}. Přesunout je`;
+    if (n && !window.confirm(`Typ „${name}“ používá ${what} pod „${rest[0].name}“ a typ smazat?`)) return;
     void actions.deletePrintType(id).catch(noop);
   };
 
@@ -60,55 +60,53 @@ export function PrintTypesModal({ onClose }: { onClose: () => void }) {
       title="Typy médií"
       onClose={onClose}
       testId="types-modal"
+      initialFocus="#tNew"
+      meta="Přejmenování se propíše do všech tiskovin."
       foot={
-        <>
-          <span className="meta">Přejmenování se propíše do všech tiskovin.</span>
-          <button className="btn outline" data-close2="" type="button" onClick={onClose}>
-            Hotovo
-          </button>
-        </>
+        <Button variant="outline" data-close2="" onClick={onClose}>
+          Hotovo
+        </Button>
       }
     >
       <div className="mb">
-        <div className="f w">
-          <div className="ulist" id="tl">
-            {types.map((t) => (
-              <div className="urow trow" key={`${t.id}:${t.name}`}>
-                <input
-                  data-ti={t.id}
-                  defaultValue={t.name}
-                  aria-label={`Typ ${t.name}`}
-                  style={ROW_INPUT}
-                  onBlur={(e) => rename(e.currentTarget, t.id, t.name)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") rename(e.currentTarget, t.id, t.name);
-                  }}
-                />
-                <span className="n">{countOf(t.id)} položek</span>
-                <button className="btn outline" data-td={t.id} type="button" style={ROW_BTN} onClick={() => remove(t.id, t.name)}>
-                  Smazat
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="f w">
-          <label htmlFor="tNew">Nový typ</label>
-          <div className="trow">
+        <ul className="ulist types-list" id="tl" aria-label="Typy médií">
+          {types.map((t) => (
+            <li className="urow trow" key={`${t.id}:${t.name}`}>
+              <input
+                className="ti-input"
+                data-ti={t.id}
+                defaultValue={t.name}
+                aria-label={`Název typu ${t.name}`}
+                autoComplete="off"
+                onBlur={(e) => rename(e.currentTarget, t.id, t.name)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") rename(e.currentTarget, t.id, t.name);
+                }}
+              />
+              <span className="n">{pluralize(countOf(t.id), "položka", "položky", "položek")}</span>
+              <Button variant="ghost" size="sm" className="ti-del" data-td={t.id} aria-label={`Smazat typ ${t.name}`} onClick={() => remove(t.id, t.name)}>
+                Smazat
+              </Button>
+            </li>
+          ))}
+        </ul>
+        <Field label="Nový typ" htmlFor="tNew" wide>
+          <div className="types-new">
             <input
               ref={newRef}
               id="tNew"
+              className="ti-new"
               placeholder="Např. Pozvánky"
-              style={NEW_INPUT}
+              autoComplete="off"
               onKeyDown={(e) => {
                 if (e.key === "Enter") add();
               }}
             />
-            <button className="btn primary" id="tAdd" type="button" onClick={add}>
+            <Button variant="primary" id="tAdd" onClick={add}>
               Přidat
-            </button>
+            </Button>
           </div>
-        </div>
+        </Field>
       </div>
     </Modal>
   );

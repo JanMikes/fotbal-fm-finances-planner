@@ -1,0 +1,19 @@
+/* „Přílohy a odkazy" box (task / print modal). One border per row: no panel around the rows (prototype `.attbox`
+   had a bordered grey panel around bordered rows). Overrides prototype-app.css with ≥ its specificity. */
+.attbox.attbox{border:0;border-radius:0;padding:0;background:transparent;gap:10px}
+.attbox .items:empty{display:none}
+.attbox .item{min-height:48px}
+.attbox .item a{color:var(--fm-steel)}
+.attbox .item button{display:inline-flex;align-items:center;justify-content:center;color:var(--grey-600)}
+.attbox .item button:hover{color:var(--c-danger-ink)}
+.attbox .item button:focus-visible{outline-offset:-2px}
+.attbox .drop{min-height:64px;gap:8px 12px;flex-wrap:wrap;padding:10px 12px;background:#fff;font-size:13px;color:var(--grey-700);text-transform:none;letter-spacing:0;font-weight:500}
+.attbox .drop.on{border-color:var(--fm-blue);background:var(--blue-050);color:var(--fm-steel)}
+.attbox .drop:hover{background:var(--grey-050);color:var(--grey-700)}
+.attbox .drop .btn{flex:none}
+.attbox .att-pick{min-height:48px}
+.attbox .attrow{gap:8px}
+.attbox .attrow input{flex:1 1 200px;min-width:0}
+.attbox .attrow .btn{flex:none;min-height:44px}
+@media (pointer:coarse){.attbox .item button{width:44px;height:44px}}
+@media (max-width:760px){.attbox .attrow .btn{flex:1 1 100%}}

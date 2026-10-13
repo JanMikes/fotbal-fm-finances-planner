@@ -4,18 +4,20 @@ import { useState } from "react";
 import { useUi } from "@/components/UiContext";
 import { attachmentCounts } from "@/features/attachments/AttachmentBox";
 import { Board } from "@/features/board/Board";
+import { BoardEmpty } from "@/features/board/BoardEmpty";
+import { ALL } from "@/lib/constants";
 import { columnsOf, itemsInColumn, printVisible, sumPrices } from "@/lib/filters";
 import { kcs } from "@/lib/format";
 import { useActions, useAppState, usePrefs } from "@/lib/store/react";
 import type { PrintItem } from "@/lib/types";
-import { PrintBar } from "./PrintBar";
+import { PRINT_BOARD_HINT_ID, PrintBar } from "./PrintBar";
 import { PrintCard } from "./PrintCard";
 
 const noop = () => undefined;
 
 export function PrintTab() {
   const state = useAppState();
-  const [prefs] = usePrefs();
+  const [prefs, updatePrefs] = usePrefs();
   const actions = useActions();
   const { openPrint, openTypes, setReportOpen } = useUi();
   const [q, setQ] = useState("");
@@ -29,12 +31,22 @@ export function PrintTab() {
   );
   const total = sumPrices([...visible.values()].flat());
   const counts = attachmentCounts(state.attachments, "print");
+  const filtered = prefs.prFilter !== ALL || (prefs.prMonth || "all") !== "all" || q.trim() !== "";
+  const nothingShown = [...visible.values()].every((items) => items.length === 0);
+
+  const resetFilters = () => {
+    updatePrefs({ prFilter: ALL, prMonth: "all" });
+    setQ("");
+    document.getElementById("pq")?.focus();
+  };
 
   return (
     <>
       <PrintBar q={q} onQ={setQ} total={total} onTypes={openTypes} onYear={() => setReportOpen(true)} />
+      <BoardEmpty show={filtered && nothingShown} text="Filtru neodpovídá žádná tiskovina." onReset={resetFilters} />
       <Board<PrintItem>
         mode="print"
+        describedBy={PRINT_BOARD_HINT_ID}
         columns={cols}
         visible={visible}
         emptyText="Žádné tiskoviny"

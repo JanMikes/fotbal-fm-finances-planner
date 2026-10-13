@@ -1,5 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { card, column, columnsOf, createPerson, deleteNode, getState, mouseDrag, openApp, touchDrag } from "./boards-helpers";
+import { expectNoA11yViolations, expectValue, optionText, pick, setDate } from "./ui-helpers";
 
 /**
  * Úkoly tab (prototype §7, §8): task CRUD, modal behaviour, columns, drag & drop (mouse + touch), filters,
@@ -54,17 +55,21 @@ test("create, edit, duplicate and delete a task", async ({ page, request }) => {
   await page.locator("#btnNew").click();
   const modal = page.getByTestId("task-modal");
   await expect(modal.locator(".mh h2")).toHaveText("Nový úkol");
-  await expect(modal.locator("#fCat")).toHaveValue("Celý klub");
-  await expect(modal.locator("#fCol")).toHaveValue(cols[0].id);
+  await expectValue(modal.locator("#fCat"), "Celý klub");
+  await expectValue(modal.locator("#fCol"), cols[0].id);
   await expect(modal.locator("#fTitle")).toBeFocused();
   await expect(modal.locator("#del")).toHaveCount(0);
 
-  await modal.locator("#fCat").selectOption("Merch");
-  await modal.locator("#fCol").selectOption(cols[1].id);
+  await pick(page, modal.locator("#fCat"), "Merch");
+  await pick(page, modal.locator("#fCol"), cols[1].id);
   await modal.locator("#fTitle").fill(`${TAG} Plakát`);
+  // Czech date entry: typed „15. 6. 2031" is understood and normalised on blur (with the weekday)
+  await setDate(modal.locator("#fDue"), "15. 6. 2031");
+  await expect(modal.locator("#fDue")).toHaveValue("ne 15. 6. 2031");
+  await expectValue(modal.locator("#fDue"), "2031-06-15");
   await modal.locator("#fDesc").fill("Popisek úkolu");
-  await modal.locator("#fLead").selectOption(persons.a);
-  await modal.locator("#fOwner").selectOption(persons.b);
+  await pick(page, modal.locator("#fLead"), persons.a);
+  await pick(page, modal.locator("#fOwner"), persons.b);
   await modal.getByRole("button", { name: "Vytvořit úkol" }).click();
   await expect(modal).toHaveCount(0);
 
@@ -76,11 +81,14 @@ test("create, edit, duplicate and delete a task", async ({ page, request }) => {
   await expect(c.locator(".av.lead")).toHaveText("EA"); // initials of „E2E-T… Alena"
   await expect(c.locator(".av.lead")).toHaveAttribute("title", `Vedoucí: ${TAG} Alena Nová`);
   await expect(c.locator(".av:not(.lead)")).toHaveAttribute("title", `Zodpovědný: ${TAG} Boris Malý`);
+  await expect(c.locator(".due")).toHaveText("15. 6. 2031"); // other year → with the year
+  await expect(c.locator(".due")).toHaveAttribute("title", /^Termín dokončení: 15\.\s6\.\s2031 — za \d+ dní$/);
 
   // edit
   await c.click();
   await expect(modal.locator(".mh h2")).toHaveText("Úkol");
-  await expect(modal.locator(".meta")).toContainText(`Založil(a) ${TAG} Alena Nová,`);
+  await expect(modal.locator(".meta")).toContainText(`Založil(a) ${TAG} Alena Nová ·`);
+  await expect(modal.locator("#fDue")).toHaveValue("ne 15. 6. 2031");
   await modal.locator("#fTitle").fill(`${TAG} Plakát A3`);
   await modal.getByRole("button", { name: "Uložit" }).click();
   await expect(modal).toHaveCount(0);
@@ -114,6 +122,13 @@ test("modal: required title, Esc / overlay close, prefill from filter and column
   await modal.getByRole("button", { name: "Vytvořit úkol" }).click();
   await expect(modal).toBeVisible();
   await expect(modal.locator("#fTitle")).toHaveCSS("border-top-color", "rgb(179, 38, 30)");
+  await expect(modal.locator("#fTitle")).toHaveAttribute("aria-invalid", "true");
+  await expect(modal.locator("#fTitle")).toBeFocused();
+  await expect(modal.locator("#fTitle-err")).toHaveText("Vyplňte název úkolu");
+  await expect(modal.locator("#fTitle")).toHaveAttribute("aria-describedby", "fTitle-err");
+  // typing clears the error
+  await modal.locator("#fTitle").fill("x");
+  await expect(modal.locator("#fTitle-err")).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(modal).toHaveCount(0);
 
@@ -123,10 +138,10 @@ test("modal: required title, Esc / overlay close, prefill from filter and column
   await expect(modal).toHaveCount(0);
 
   // category from the active group filter (its first category) + column from the column's „+ Přidat úkol"
-  await page.locator("#grp").selectOption("Mládež");
+  await pick(page, "#grp", "Mládež");
   await column(page, cols[2].title).locator(".add").click();
-  await expect(modal.locator("#fCat")).toHaveValue("Dorost U16");
-  await expect(modal.locator("#fCol")).toHaveValue(cols[2].id);
+  await expectValue(modal.locator("#fCat"), "Dorost U16");
+  await expectValue(modal.locator("#fCol"), cols[2].id);
   await page.keyboard.press("Escape");
 });
 
@@ -151,6 +166,8 @@ test("columns: add (prompt), rename inline, delete with confirm", async ({ page,
   await expect(page.locator("#board .col").last().locator(".t")).toHaveText(`${TAG} Sloupec`);
   await expect(page.locator("#board .col").last().locator(".empty-col")).toHaveText("Žádné úkoly");
 
+  // wait until the create reached the server (a rename racing the optimistic create would 404 — store limitation)
+  await expect.poll(async () => columnsOf(await getState(request), "tasks").some((c) => c.title === `${TAG} Sloupec`)).toBe(true);
   // rename: click the title, type, Enter
   const t = column(page, `${TAG} Sloupec`).locator(".t");
   await t.click();
@@ -172,7 +189,7 @@ test("columns: add (prompt), rename inline, delete with confirm", async ({ page,
   const taskId = await createTask(request, { columnId: col.id, title: `${TAG} V mazaném sloupci` });
   await expect(column(page, `${TAG} Přejmenováno`).locator(".card")).toHaveCount(1);
   page.once("dialog", (d) => {
-    expect(d.message()).toBe("Sloupec obsahuje 1 úkolů. Přesunout je do prvního sloupce a sloupec smazat?");
+    expect(d.message()).toBe("Sloupec obsahuje 1 úkol. Přesunout ho do prvního sloupce a sloupec smazat?");
     void d.accept();
   });
   await column(page, `${TAG} Přejmenováno`).locator(".x").click();
@@ -280,16 +297,16 @@ test("filters: group (with counts), month, search, Jen moje úkoly", async ({ pa
   const cards = page.locator("#board .card h3");
   await expect(cards).toHaveCount(3);
 
-  await expect(page.locator("#grp option[value='Muži']")).toHaveText(/^Muži \(\d+\)$/);
-  await page.locator("#grp").selectOption("Muži");
+  expect(await optionText(page, "#grp", "Muži")).toMatch(/^Muži \(\d+\)$/);
+  await pick(page, "#grp", "Muži");
   await expect(cards).toHaveText([`${TAG} Flt muži`]);
-  await page.locator("#grp").selectOption("Vše");
+  await pick(page, "#grp", "Vše");
 
-  await page.locator("#mon").selectOption("none");
+  await pick(page, "#mon", "none");
   await expect(cards).toHaveCount(2);
-  await page.locator("#mon").selectOption(thisMonth);
+  await pick(page, "#mon", thisMonth);
   await expect(cards).toHaveText([`${TAG} Flt muži`]);
-  await page.locator("#mon").selectOption("all");
+  await pick(page, "#mon", "all");
 
   await page.locator("#mine").check();
   await expect(cards).toHaveText([`${TAG} Flt muži`, `${TAG} Flt dorost`]);
@@ -299,6 +316,123 @@ test("filters: group (with counts), month, search, Jen moje úkoly", async ({ pa
   await page.locator("#q").fill(`${TAG} Flt merch`);
   await expect(cards).toHaveText([`${TAG} Flt merch`]);
   await expect(column(page, cols[1].title).locator(".empty-col")).toHaveText("Žádné úkoly");
+  await expect(page.locator(".board-empty")).toHaveCount(0); // something is still shown
+});
+
+test("filtered empty state: banner + „Zrušit filtry“ resets the filters and the search; „/“ focuses the search", async ({ page }) => {
+  await openApp(page, { me: persons.a, view: "board", filter: "Muži", month: "none", mine: true });
+  await page.locator("#q").fill(`${TAG} nic takového`);
+  await expect(page.locator("#board .card")).toHaveCount(0);
+  const banner = page.locator(".board-empty");
+  await expect(banner).toContainText("Filtru neodpovídá žádný úkol.");
+  await expect(page.locator(".board-status")).toHaveAttribute("role", "status");
+  await expect(page.locator("#board .col").first().locator(".empty-col")).toHaveText("Žádné úkoly"); // per-column texts stay
+  await banner.getByRole("button", { name: "Zrušit filtry" }).click();
+  await expect(banner).toHaveCount(0);
+  await expect(page.locator("#q")).toHaveValue("");
+  await expect(page.locator("#q")).toBeFocused();
+  await expectValue(page.locator("#grp"), "Vše");
+  await expectValue(page.locator("#mon"), "all");
+  await expect(page.locator("#mine")).not.toBeChecked();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("fotbalfm.ui.v1") ?? "{}"))).toMatchObject({ filter: "Vše", month: "all", mine: false });
+
+  // „/" jumps to the search from anywhere on the board (but not while typing in a field)
+  await page.locator("#board .col").first().locator(".add").focus();
+  await page.keyboard.press("/");
+  await expect(page.locator("#q")).toBeFocused();
+  await page.keyboard.type("a/b");
+  await expect(page.locator("#q")).toHaveValue("a/b");
+});
+
+test("keyboard: Tab to a card, Enter / Space open it, Esc closes and focus returns to the card", async ({ page, request }) => {
+  const cols = columnsOf(await getState(request), "tasks");
+  await createTask(request, { columnId: cols[0].id, title: `${TAG} Klávesnice` });
+  await open(page, `${TAG} Klávesnice`);
+  const c = card(page, `${TAG} Klávesnice`);
+  await expect(c).toHaveAttribute("role", "button");
+  await expect(c).toHaveAttribute("tabindex", "0");
+  // Tab from the column header reaches the card
+  await column(page, cols[0].title).locator(".x").focus();
+  await page.keyboard.press("Tab");
+  await expect(c).toBeFocused();
+  await page.keyboard.press("Enter");
+  const modal = page.getByTestId("task-modal");
+  await expect(modal.locator("#fTitle")).toHaveValue(`${TAG} Klávesnice`);
+  await page.keyboard.press("Escape");
+  await expect(modal).toHaveCount(0);
+  await expect(c).toBeFocused();
+  await page.keyboard.press(" ");
+  await expect(modal).toBeVisible();
+  // Ctrl/Cmd+Enter saves
+  await modal.locator("#fTitle").fill(`${TAG} Klávesnice 2`);
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await expect(modal).toHaveCount(0);
+  await expect(card(page, `${TAG} Klávesnice 2`)).toHaveCount(1);
+  // names of the column controls
+  await expect(column(page, cols[0].title).locator(".x")).toHaveAttribute("aria-label", `Smazat sloupec ${cols[0].title}`);
+  await expect(column(page, cols[0].title).locator(".t")).toHaveAttribute("role", "textbox");
+  await expect(column(page, cols[0].title).locator(".t")).toHaveAttribute("aria-label", "Název sloupce");
+});
+
+test("a11y: board, filter popup, task modal (new / existing / validation), calendar — no serious axe violations", async ({ page, request }) => {
+  const cols = columnsOf(await getState(request), "tasks");
+  await createTask(request, { columnId: cols[1].id, title: `${TAG} Axe`, dueDate: "2031-06-15", leadId: persons.a });
+  await open(page, `${TAG} Axe`);
+  const scope = { include: ["#tbar", "#board", ".board-status"] };
+  await expectNoA11yViolations(page, scope);
+  await page.locator("#mon").click();
+  await expect(page.locator("#mon-listbox")).toBeVisible();
+  await expectNoA11yViolations(page, { include: ["#tbar", "[data-fm-layer]"] });
+  await page.keyboard.press("Escape");
+
+  await page.locator("#q").fill(`${TAG} nic`);
+  await expect(page.locator(".board-empty")).toBeVisible();
+  await expectNoA11yViolations(page, scope);
+  await page.locator("#q").fill(`${TAG} Axe`);
+
+  const modal = page.getByTestId("task-modal");
+  await card(page, `${TAG} Axe`).click();
+  await expect(modal).toBeVisible();
+  await expectNoA11yViolations(page, { include: ".modal" });
+  await modal.locator(".fm-date__btn").click();
+  await expect(page.locator('[role="dialog"][aria-label="Vybrat datum"]')).toBeVisible();
+  await expectNoA11yViolations(page, { include: [".modal", "[data-fm-layer]"] });
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await expect(modal).toHaveCount(0);
+
+  await page.locator("#btnNew").click();
+  await modal.getByRole("button", { name: "Vytvořit úkol" }).click();
+  await expect(modal.locator("#fTitle-err")).toBeVisible();
+  await page.mouse.move(1, 1); // measure the resting colours, not the hover state of „Vytvořit úkol"
+  await expectNoA11yViolations(page, { include: ".modal" });
+});
+
+test.describe("mobile filter bar", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+  test("search + „Filtry (n)“ toggle; the board keeps ≥ 560 px", async ({ page }) => {
+    await openApp(page, { me: persons.a, view: "board", filter: "Muži" });
+    const toggle = page.locator("#tbar .fbar-toggle");
+    await expect(page.locator("#q")).toBeVisible();
+    await expect(toggle).toHaveText("Filtry (1)");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(toggle).toHaveAttribute("aria-controls", "tbar-panel");
+    await expect(page.locator("#grp")).toBeHidden();
+    const board = (await page.locator("#board").boundingBox())!;
+    expect(board.height).toBeGreaterThanOrEqual(560);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390); // no sideways page scroll
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator("#grp")).toBeVisible();
+    await expect(page.locator("#mine")).toBeVisible();
+    // the select opens as a bottom sheet on touch
+    await page.locator("#grp").click();
+    await expect(page.locator(".fm-sheet")).toBeVisible();
+    await page.locator('#grp-listbox [role="option"][data-value="Vše"]').click();
+    await expectValue(page.locator("#grp"), "Vše");
+    await expect(toggle).toHaveText("Filtry");
+    await expectNoA11yViolations(page, { include: ["#tbar", "#board"] });
+  });
 });
 
 test("attachments: upload a file and add a link (https:// auto-prefix)", async ({ page }) => {

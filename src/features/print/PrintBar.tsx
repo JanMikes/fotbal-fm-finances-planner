@@ -1,46 +1,84 @@
 "use client";
 /**
- * Tiskoviny filter bar (prototype §9.1): type select with counts, month select with Kč sums, search,
- * „Typy médií", „Uzavřít rok" and the red „Celkem …" box. Archived items are excluded everywhere (DECISIONS #9).
+ * Tiskoviny filter bar (prototype §9.1): search, type select with counts, month select with Kč sums, „Typy médií",
+ * „Roční přehled" (opens the yearly report) and the red „Celkem …" box. Archived items are excluded everywhere
+ * (DECISIONS #9). One row from 900 px; on mobile the selects and buttons sit behind „Filtry" and the total gets
+ * its own slim row. „/" focuses the search.
  */
+import { Select } from "@/components/ui/Select";
+import { FilterBar } from "@/features/board/FilterBar";
+import { useSlashFocus } from "@/features/board/useSlashFocus";
+import { ALL } from "@/lib/constants";
 import { printMonthOptions, printTotalLabel, printTypeOptions } from "@/lib/filters";
 import { kcs } from "@/lib/format";
 import { useAppState, usePrefs } from "@/lib/store/react";
 
+export const PRINT_BOARD_HINT_ID = "boardHint";
+
 export function PrintBar({ q, onQ, total, onTypes, onYear }: { q: string; onQ: (q: string) => void; total: number; onTypes: () => void; onYear: () => void }) {
   const state = useAppState();
   const [prefs, updatePrefs] = usePrefs();
+  useSlashFocus("pq");
   const types = printTypeOptions(state.printItems, state.printTypes);
   const month = prefs.prMonth || "all";
   const months = printMonthOptions(state.printItems, prefs.prFilter, new Date(), month);
+  const active = (prefs.prFilter !== ALL ? 1 : 0) + (month !== "all" ? 1 : 0);
   return (
-    <div className="bar" id="pbar">
-      <div className="sub">
-        <select className="search fsel" id="ptype" aria-label="Filtr typu média" value={prefs.prFilter} onChange={(e) => updatePrefs({ prFilter: e.target.value })}>
-          {types.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-        </select>
-        <select className="search fsel" id="pmon" aria-label="Měsíc" value={month} onChange={(e) => updatePrefs({ prMonth: e.target.value })}>
-          {months.map((m) => (
-            <option key={m.value} value={m.value}>
-              {m.label}
-            </option>
-          ))}
-        </select>
-        <input className="search" id="pq" type="search" placeholder="Hledat v tiskovinách…" value={q} onChange={(e) => onQ(e.target.value)} />
+    <FilterBar
+      id="pbar"
+      active={active}
+      search={
+        <input
+          className="search"
+          id="pq"
+          type="search"
+          placeholder="Hledat v tiskovinách…"
+          aria-label="Hledat v tiskovinách"
+          aria-keyshortcuts="/"
+          autoComplete="off"
+          value={q}
+          onChange={(e) => onQ(e.target.value)}
+        />
+      }
+      after={
+        <>
+          <div className="ptot">
+            <span id="ptotL">{printTotalLabel(month)}</span> <b id="ptot">{kcs(total)}</b>
+          </div>
+          <p className="sr-only" id={PRINT_BOARD_HINT_ID}>
+            Karty přetahujte myší nebo podržením prstu. Kartu otevřete klávesou Enter, stav tiskoviny změníte v jejím detailu.
+          </p>
+        </>
+      }
+    >
+      <Select
+        id="ptype"
+        variant="filter"
+        className="fbar-sel"
+        aria-label="Filtr typu média"
+        sheetTitle="Typ média"
+        value={prefs.prFilter}
+        onChange={(v) => updatePrefs({ prFilter: v })}
+        options={types.map((t) => ({ value: t.value, label: t.label }))}
+      />
+      <Select
+        id="pmon"
+        variant="filter"
+        className="fbar-sel"
+        aria-label="Měsíc"
+        sheetTitle="Měsíc"
+        value={month}
+        onChange={(v) => updatePrefs({ prMonth: v })}
+        options={months.map((m) => ({ value: m.value, label: m.label }))}
+      />
+      <div className="fbar-actions">
         <button className="btn outline" id="btnTypes" type="button" onClick={onTypes}>
           Typy médií
         </button>
         <button className="btn outline" id="btnYear" type="button" onClick={onYear}>
-          Uzavřít rok
+          Roční přehled
         </button>
-        <div className="ptot">
-          <span id="ptotL">{printTotalLabel(month)}</span> <b id="ptot">{kcs(total)}</b>
-        </div>
       </div>
-    </div>
+    </FilterBar>
   );
 }

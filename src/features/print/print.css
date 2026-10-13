@@ -1,0 +1,22 @@
+/* Tiskoviny modals: „Zaplaceno FK FM" pills, „Typy médií" list. Overrides prototype-app.css with ≥ its specificity. */
+
+/* =================== Zaplaceno FK FM =================== */
+.paidc .paidc-dot{width:12px;height:12px;border-radius:50%;flex:none}
+.paidc .paidc-dot.is-yes{background:var(--c-ok)}
+.paidc .paidc-dot.is-no{background:var(--c-danger)}
+
+/* =================== Typy médií =================== */
+.ulist.types-list{gap:0;grid-column:1/-1;display:flex;flex-direction:column;margin:0;padding:0;list-style:none;border:1px solid var(--grey-200);border-radius:var(--radius-sm)}
+.types-list>.urow{border:0;border-radius:0;padding:6px 6px 6px 8px;gap:8px}
+.types-list>.urow+.urow{border-top:1px solid var(--grey-200)}
+/* the rename field reads as text until hovered / focused (no border inside a border) */
+.types-list .urow .ti-input{flex:1 1 0;width:0;min-width:0;min-height:40px;padding:0 8px;border:1px solid transparent;border-radius:var(--radius-sm);background:transparent;font-size:15px;font-weight:700;color:var(--fm-navy)}
+.types-list .urow .ti-input:hover{border-color:var(--grey-200);background:#fff}
+.types-list .urow .ti-input:focus{outline:0;border-color:var(--fm-blue);box-shadow:var(--focus-ring);background:#fff}
+.types-list .urow .n{min-width:72px;text-align:right}
+.types-list .urow .btn.ghost.ti-del{flex:none;color:var(--c-danger-ink)}
+.types-list .urow .btn.ghost.ti-del:hover{background:var(--c-danger-bg)}
+.types-new{display:flex;gap:8px;align-items:stretch}
+.types-new .ti-new{flex:1 1 0;width:0;min-width:0}
+.types-new .btn{flex:none;min-height:44px}
+@media (max-width:760px){.types-list .urow .n{min-width:0}}
