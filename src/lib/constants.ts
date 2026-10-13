@@ -74,8 +74,36 @@ export const AVPAL: readonly string[] = [
   "#c4c8ce",
 ];
 
-/** Swatches that need dark (navy) text. */
-export const LIGHT: ReadonlySet<string> = new Set(["#c4c8ce"]);
+/** Swatches that need dark (navy) text: white on them is below 4.5:1 (#4fbde4 2.2:1, #d98a00 2.8:1). */
+export const LIGHT: ReadonlySet<string> = new Set(["#c4c8ce", "#4fbde4", "#d98a00"]);
+
+/** Czech names of the palette colours (AVC, AVPAL, budget, unit) — accessible names for swatch radios. */
+const COLOR_NAMES: Readonly<Record<string, string>> = {
+  "#0099cf": "Modrá",
+  "#4fbde4": "Světle modrá",
+  "#007fb4": "Středně modrá",
+  "#00588e": "Ocelová",
+  "#093f6b": "Tmavě modrá",
+  "#12304f": "Noční modrá",
+  "#1b2341": "Námořnická modrá",
+  "#63666b": "Šedá",
+  "#1f8a4c": "Zelená",
+  "#c62f28": "Červená",
+  "#d98a00": "Oranžová",
+  "#6b4fa8": "Fialová",
+  "#c4c8ce": "Světle šedá",
+  "var(--fm-blue)": "Modrá",
+  red: "Červená",
+  green: "Zelená",
+  blue: "Modrá",
+};
+
+/** `colorName("#c62f28")` → „Červená"; unknown values fall back to the input (upper-cased hex). */
+export function colorName(color: string | null | undefined): string {
+  if (!color) return "";
+  const key = color.trim().toLowerCase();
+  return COLOR_NAMES[key] ?? (key.startsWith("#") ? key.toUpperCase() : color);
+}
 
 export const DEFAULT_UNIT_COLOR = "#00588e";
 

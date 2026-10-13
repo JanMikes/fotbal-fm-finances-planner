@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AVC } from "@/lib/constants";
+import { AVC, AVPAL, BUDGET_COLORS, colorName } from "@/lib/constants";
 import {
   assignedTaskCount,
   buildTree,
@@ -81,7 +81,10 @@ describe("tree", () => {
     expect(colorOf(nodes, persons[2].id)).toBe(AVC[2]);
     expect(colorOf([person({ id: "x", avatarColor: "#1f8a4c" })], "x")).toBe("#1f8a4c");
     expect(isLightColor("#C4C8CE")).toBe(true);
+    expect(isLightColor("#4fbde4")).toBe(true); // white text would be 2.2:1
+    expect(isLightColor("#D98A00")).toBe(true); // 2.8:1
     expect(isLightColor("#0099cf")).toBe(false);
+    expect(isLightColor(null)).toBe(false);
   });
 
   it("buildTree nests and survives cycles in data", () => {
@@ -91,5 +94,15 @@ describe("tree", () => {
     expect(t[0].children[1].children[1].children[0].node.id).toBe("c");
     const cyc = [person({ id: "x", parentId: "y" }), person({ id: "y", parentId: "x" })];
     expect(buildTree(cyc)).toEqual([]);
+  });
+
+  it("Czech colour names for every palette colour", () => {
+    for (const c of [...AVC, ...AVPAL, ...BUDGET_COLORS.map((b) => b.color)]) expect(colorName(c)).not.toMatch(/^#/);
+    expect(colorName("#C62F28")).toBe("Červená");
+    expect(colorName("#4fbde4")).toBe("Světle modrá");
+    expect(colorName("var(--fm-blue)")).toBe("Modrá");
+    expect(colorName("green")).toBe("Zelená");
+    expect(colorName("#123456")).toBe("#123456");
+    expect(colorName(null)).toBe("");
   });
 });

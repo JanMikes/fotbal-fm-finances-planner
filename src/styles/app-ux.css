@@ -1,0 +1,99 @@
+/* UX round — semantic tokens + global overrides on top of the frozen prototype CSS (prototype-app.css is never
+   edited; every rule here overrides it with ≥ its specificity, loaded after it). Primitive styles live in
+   src/components/ui/ui.css. */
+
+/* ---------- Tokens ---------- */
+:root{
+  --c-ok:#1f8a4c;
+  --c-ok-bg:#e7f4ec;
+  --c-danger:#c62f28;
+  --c-danger-ink:#b3261e;
+  --c-danger-bg:#fbeceb;
+  --c-danger-line:#e6b8b4;
+  --c-warn:#d98a00;
+  --c-warn-bg:#fff4dc;
+  --c-warn-ink:#8a5a00;
+  --control-h:44px;
+  --control-h-compact:40px;
+  --control-fs:15px;
+  --z-modal:200;
+  --z-toast:300;
+  --z-layer:400;
+  --focus-ring-danger:0 0 0 3px rgba(179,38,30,.3);
+  --focus-ring-dark:0 0 0 3px rgba(143,214,239,.5);
+}
+
+/* ---------- Utilities ---------- */
+.sr-only{position:absolute!important;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
+
+/* ---------- Focus (#8) ---------- */
+:focus-visible{outline:2px solid var(--fm-blue);outline-offset:2px}
+/* light ring on navy / steel surfaces */
+.top :focus-visible,.onode.root:focus-visible,.onode.root :focus-visible,.onode.unit:not(.lt):focus-visible,.onode.unit:not(.lt) :focus-visible,.cb-h:focus-visible,.kp.main :focus-visible{outline-color:var(--blue-200)}
+/* text fields show focus with border + ring instead of an outline */
+:where(input:not([type=checkbox],[type=radio],[type=range],[type=file]),select,textarea):focus-visible{outline:0;border-color:var(--fm-blue);box-shadow:var(--focus-ring)}
+.f input:focus,.f select:focus,.f textarea:focus{outline:0;border-color:var(--fm-blue);box-shadow:var(--focus-ring)}
+.cb-in input:focus{outline:0;border-color:var(--fm-blue);box-shadow:var(--focus-ring)}
+/* invalid (keeps #b3261e = rgb(179,38,30) — tasks.spec) ; (0,3,1) beats `.f input:focus` */
+.f input[aria-invalid="true"],.f select[aria-invalid="true"],.f textarea[aria-invalid="true"]{border-color:var(--c-danger-ink)}
+.f input[aria-invalid="true"]:focus,.f select[aria-invalid="true"]:focus,.f textarea[aria-invalid="true"]:focus{border-color:var(--c-danger-ink);box-shadow:var(--focus-ring-danger)}
+.modal:focus,.modal:focus-visible{outline:none}
+
+/* ---------- Search fields (#25) ---------- */
+.search{background-color:#fff}
+input.search{padding-left:36px;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%2363666b' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='m11 11 3.5 3.5'/%3E%3C/svg%3E") no-repeat 12px 50%/16px 16px}
+.search:focus,.search:focus-visible{outline:0;border-color:var(--fm-blue);box-shadow:var(--focus-ring);background-color:#fff}
+input.search::-webkit-search-cancel-button{cursor:pointer}
+
+/* ---------- Custom radios / checkboxes: focusable, clearer checked state (#7 #21) ---------- */
+.budc label,.chkgrid label,.avpick label{position:relative}
+.budc input,.chkgrid input,.avpick input{display:block;position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;opacity:0;pointer-events:none}
+.budc label{padding:0 12px}
+.budc label:has(input:checked){background:var(--blue-050);border-color:var(--fm-navy);box-shadow:inset 0 0 0 1px var(--fm-navy);color:var(--fm-navy)}
+.budc label:has(input:checked)::after{content:"✓";font-weight:800;color:var(--fm-navy)}
+.chkgrid label:has(input:checked){background:var(--fm-navy);border-color:var(--fm-navy);color:#fff}
+.chkgrid label:has(input:checked)::before{content:"✓";font-weight:800}
+.avpick label:has(input:checked){border-color:var(--fm-navy)}
+.avpick i{position:relative}
+.avpick label:has(input:checked) i::after{content:"✓";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:800;font-style:normal;text-shadow:0 0 2px rgba(18,23,43,.8)}
+.budc label:has(input:focus-visible),.chkgrid label:has(input:focus-visible){outline:2px solid var(--fm-blue);outline-offset:2px}
+.avpick label:has(input:focus-visible){outline:2px solid var(--fm-blue);outline-offset:1px}
+
+/* ---------- Legibility (#29): grey-500 → grey-600 for small text, 11px minimum ---------- */
+.hint,.mf .meta,.colh .c,.empty-col,.card .ft,.item .sz,.legend .lg-t,.trow .n,.tn span,.kp i,.yv-e,.onode .st,.due.done,.av.empty{color:var(--grey-600)}
+.card .cat,.onode .ar span,.item .ty,.yv-r .ty,.legend .lg-t,#infoPop .ih,.cb-k small,.av{font-size:11px}
+
+/* ---------- Modal layout (#1 #16) ---------- */
+.ov{align-items:center;padding:24px 16px}
+.modal{display:flex;flex-direction:column;max-height:calc(100vh - 48px);max-height:calc(100dvh - 48px)}
+.modal.modal--lg{max-width:960px}
+.modal>.mh,.modal>.mf{flex:none}
+.modal>.mb{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain}
+.mf{gap:10px 12px}
+.mf--slots>.meta{flex:1 0 100%;margin:0;font-size:12px;line-height:1.4}
+.mf-start,.mf-end{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0}
+.mf-end{margin-left:auto;justify-content:flex-end}
+/* legacy footers (meta + all buttons passed as `foot`) keep the prototype layout */
+.mf-end:has(>.meta){flex:1 1 auto}
+@media (max-width:760px){
+  .ov{padding:0;align-items:stretch}
+  .modal{max-height:100%;height:100%}
+  .mh{position:static}
+  .mf{position:static;padding:10px 16px calc(10px + env(safe-area-inset-bottom))}
+  .mf-end{flex:1 1 auto}
+  .mf-end .btn.primary{flex:1 1 auto}
+  .mf--slots .mf-start .btn{padding:0 12px;font-size:12px}
+}
+@media print{.modal{display:block;max-height:none;height:auto}.modal>.mb{overflow:visible}}
+
+/* ---------- Touch (#25) ---------- */
+@media (pointer:coarse){
+  .btn,.search,.tog{min-height:44px}
+  .tog input{width:24px;height:24px}
+}
+
+/* ---------- Reduced motion (#30) ---------- */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;transition-delay:0s!important;scroll-behavior:auto!important}
+  .btn:active{transform:none}
+}

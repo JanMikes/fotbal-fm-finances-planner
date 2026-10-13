@@ -11,6 +11,8 @@ import {
   nf,
   normalizeUrl,
   parseDigits,
+  plural,
+  pluralize,
   parseDigitsOrZero,
   qtyLabel,
   signedKc,
@@ -65,11 +67,21 @@ describe("format", () => {
   });
 
   it("dates in cs-CZ", () => {
-    expect(formatDate("2026-10-13")).toBe("13. 10. 2026");
-    expect(formatDayMonth("2026-10-15")).toBe("15. 10.");
+    expect(formatDate("2026-10-13")).toBe("13.\u00a010.\u00a02026"); // NBSP: dates never wrap
+    expect(formatDayMonth("2026-10-15")).toBe("15.\u00a010.");
     expect(monLab("2026-10")).toBe("Říjen 2026");
     expect(monLab("2027-01")).toBe("Leden 2027");
     expect(monthKey(new Date(2026, 0, 31))).toBe("2026-01");
+  });
+
+  it("Czech plurals", () => {
+    expect(plural(1, "položka", "položky", "položek")).toBe("položka");
+    expect(plural(4, "položka", "položky", "položek")).toBe("položky");
+    expect(plural(0, "položka", "položky", "položek")).toBe("položek");
+    expect(pluralize(1, "položka", "položky", "položek")).toBe("1 položka");
+    expect(pluralize(3, "položka", "položky", "položek")).toBe("3 položky");
+    expect(pluralize(5, "tiskovina", "tiskoviny", "tiskovin")).toBe("5 tiskovin");
+    expect(pluralize(1500, "položka", "položky", "položek")).toBe("1\u00a0500 položek");
   });
 
   it("normalizes link URLs", () => {

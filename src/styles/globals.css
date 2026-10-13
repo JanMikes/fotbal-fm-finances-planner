@@ -1,4 +1,6 @@
-/* Global stylesheet: design-system tokens + the prototype CSS verbatim (see docs/analysis/prototype.md). */
+/* Global stylesheet: design-system tokens + the prototype CSS verbatim (see docs/analysis/prototype.md), then the
+   app layers that override it (app-extra: login & additions; app-ux: UX-round tokens + global overrides — last). */
 @import "./fm/styles.css";
 @import "./fm/prototype-app.css";
 @import "./app-extra.css";
+@import "./app-ux.css";

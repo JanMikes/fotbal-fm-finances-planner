@@ -1,5 +1,6 @@
 /** Formatting / parsing helpers ported from the prototype (prototype.md §5). Pure, locale cs-CZ. */
 import { MNAMES } from "./constants";
+import { plural } from "./dates";
 
 /** Non-breaking space: thousands separator and number–unit gap, so „15 000 Kč" never wraps. */
 export const NBSP = "\u00a0";
@@ -72,21 +73,12 @@ export function qtyLabel(q: number | null | undefined): string {
   return nf(q || 0) + NBSP + "ks";
 }
 
-/** Parse "YYYY-MM-DD" as a LOCAL date (midnight). */
-export function parseIsoDate(iso: string): Date {
-  return new Date(iso.length === 10 ? iso + "T00:00:00" : iso);
-}
+/** Dates live in `dates.ts`; re-exported here so existing imports keep working. */
+export { formatDate, formatDayMonth, parseIsoDate, plural } from "./dates";
 
-/** `13. 10. 2026` — accepts "YYYY-MM-DD", an ISO timestamp, a Date or epoch ms. */
-export function formatDate(d: string | number | Date): string {
-  const date = typeof d === "string" ? parseIsoDate(d) : new Date(d);
-  return date.toLocaleDateString("cs-CZ");
-}
-
-/** `13. 10.` */
-export function formatDayMonth(d: string | Date): string {
-  const date = typeof d === "string" ? parseIsoDate(d) : d;
-  return date.toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" });
+/** `3 položky`, `1 položka`, `5 položek`, `1 500 položek` — number (nf) + the Czech plural form. */
+export function pluralize(n: number, one: string, few: string, many: string): string {
+  return nf(n) + " " + plural(n, one, few, many);
 }
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
