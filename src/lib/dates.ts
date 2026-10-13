@@ -9,7 +9,8 @@ export type IsoDate = string;
 /** "YYYY-MM" */
 export type IsoMonth = string;
 
-const NBSP = " ";
+/** Non-breaking space: joins date parts and the thousands groups / units of amounts (`format.ts` re-exports it). */
+export const NBSP = "\u00a0";
 
 /** Nominative month names, lowercase ("leden" … "prosinec"). */
 export const CS_MONTHS: readonly string[] = [
@@ -54,12 +55,17 @@ const pad2 = (n: number) => String(n).padStart(2, "0");
 /** Monday-first weekday index 0–6 of a Date. */
 const weekdayIdx = (d: Date) => (d.getDay() + 6) % 7;
 
-/** Lowercase without diacritics, single spaces. */
-export function foldText(s: string): string {
+/** Lowercase without diacritics (typeahead, search). */
+export function fold(s: string): string {
   return s
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
+    .toLowerCase();
+}
+
+/** Lowercase without diacritics, single spaces, trimmed (parsing). */
+function foldText(s: string): string {
+  return fold(s)
     .replace(/[\s  ]+/g, " ")
     .trim();
 }
@@ -96,11 +102,6 @@ function makeIso(y: number, m1: number, d: number): IsoDate | null {
 export function isValidIsoDate(s: string): boolean {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
   return !!m && makeIso(+m[1], +m[2], +m[3]) === s;
-}
-
-export function isValidIsoMonth(s: string): boolean {
-  const m = /^(\d{4})-(\d{2})$/.exec(s);
-  return !!m && +m[2] >= 1 && +m[2] <= 12;
 }
 
 export function addDays(iso: IsoDate, n: number): IsoDate {
@@ -246,26 +247,30 @@ function withImplicitYear(m1: number, d: number, now: Date): IsoDate | null {
  * Parse a typed Czech date. Accepts `1.2.2026`, `1. 2. 2026`, `1/2/2026`, `1.2.26`, `1. 2.` / `1/2` (implicit year),
  * `1. února 2026`, ISO `2026-02-01`, `dnes`, `zítra`, `pozítří`, `včera`, `+3`, `-2`; a leading weekday is ignored
  * („út 3. 11. 2026"). Returns null for anything else, incl. impossible dates (31. 2.).
+ * With `requireYear` only input that cannot grow into another date counts: a 4-digit year (`1.2.2026`,
+ * `1. února 2026`), full ISO (`2026-02-01`) or a keyword (`dnes`, `zítra` …) — used while typing, so a half-typed
+ * date („1.2.20" on the way to 2026, „+3" on the way to „+30") is never committed.
  */
-export function parseCzDate(text: string, now: Date = new Date()): IsoDate | null {
+export function parseCzDate(text: string, now: Date = new Date(), o: { requireYear?: boolean } = {}): IsoDate | null {
   let s = foldText(text);
   if (!s) return null;
   const today = toIsoDate(now);
   const kw: Record<string, number> = { dnes: 0, zitra: 1, pozitri: 2, vcera: -1, predevcirem: -2 };
   if (s in kw) return addDays(today, kw[s]);
   const rel = /^([+-])\s*(\d{1,3})$/.exec(s);
-  if (rel) return addDays(today, (rel[1] === "-" ? -1 : 1) * Number(rel[2]));
+  if (rel) return o.requireYear ? null : addDays(today, (rel[1] === "-" ? -1 : 1) * Number(rel[2]));
 
   // leading weekday: „út 3. 11. 2026", „úterý, 3. 11."
   const wd = /^([a-z]+)\.?,?\s+(?=\d)/.exec(s);
   if (wd && FOLDED_WEEKDAYS.includes(wd[1])) s = s.slice(wd[0].length);
 
-  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s);
+  let m = (o.requireYear ? /^(\d{4})-(\d{2})-(\d{2})$/ : /^(\d{4})-(\d{1,2})-(\d{1,2})$/).exec(s);
   if (m) return makeIso(+m[1], +m[2], +m[3]);
 
   // numeric: d.m.yyyy, d. m. yy, d/m/yyyy, d. m., d/m, d m yyyy
   m = /^(\d{1,2})\s*[./]\s*(\d{1,2})\s*(?:[./]\s*(\d{4}|\d{2})?)?$/.exec(s) ?? /^(\d{1,2})\s+(\d{1,2})\s+(\d{4})$/.exec(s);
   if (m) {
+    if (o.requireYear && m[3]?.length !== 4) return null;
     const y = fullYear(m[3]);
     return y === null ? withImplicitYear(+m[2], +m[1], now) : makeIso(y, +m[2], +m[1]);
   }
@@ -274,7 +279,7 @@ export function parseCzDate(text: string, now: Date = new Date()): IsoDate | nul
   m = /^(\d{1,2})\.?\s*([a-z]+\.?)\s*(\d{4})?$/.exec(s);
   if (m) {
     const mi = monthFromWord(m[2]);
-    if (mi === null) return null;
+    if (mi === null || (o.requireYear && !m[3])) return null;
     const y = fullYear(m[3]);
     return y === null ? withImplicitYear(mi + 1, +m[1], now) : makeIso(y, mi + 1, +m[1]);
   }
@@ -284,13 +289,14 @@ export function parseCzDate(text: string, now: Date = new Date()): IsoDate | nul
 /**
  * Parse a typed month: `2026-10`, `10/2026`, `10.2026`, `10. 2026`, `říjen 2026`, `rijen 2026`, `října 2026`.
  * Without `requireYear` a bare month name („říjen") means the current year. With `requireYear` only a full match
- * with a 4-digit year counts (used while typing, so a half-typed month is never committed).
+ * with a 4-digit year and a 2-digit ISO month counts (used while typing, so a half-typed month — „2026-1" on the way
+ * to „2026-10" — is never committed).
  */
 export function parseCzMonth(text: string, now: Date = new Date(), o: { requireYear?: boolean } = {}): IsoMonth | null {
   const s = foldText(text);
   if (!s) return null;
   const ok = (y: number, m1: number) => (y >= 1900 && y <= 2200 && m1 >= 1 && m1 <= 12 ? `${y}-${pad2(m1)}` : null);
-  let m = /^(\d{4})-(\d{1,2})$/.exec(s);
+  let m = (o.requireYear ? /^(\d{4})-(\d{2})$/ : /^(\d{4})-(\d{1,2})$/).exec(s);
   if (m) return ok(+m[1], +m[2]);
   m = /^(\d{1,2})\s*[./]\s*(\d{4})$/.exec(s);
   if (m) return ok(+m[2], +m[1]);

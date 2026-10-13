@@ -1,4 +1,5 @@
 /** Domain constants ported 1:1 from the prototype (docs/analysis/prototype.md §4). */
+import { capitalize, CS_MONTHS } from "./dates";
 
 export const ALL = "Vše" as const;
 
@@ -74,8 +75,6 @@ export const AVPAL: readonly string[] = [
   "#c4c8ce",
 ];
 
-/** Swatches that need dark (navy) text: white on them is below 4.5:1 (#4fbde4 2.2:1, #d98a00 2.8:1). */
-export const LIGHT: ReadonlySet<string> = new Set(["#c4c8ce", "#4fbde4", "#d98a00"]);
 
 /** Czech names of the palette colours (AVC, AVPAL, budget, unit) — accessible names for swatch radios. */
 const COLOR_NAMES: Readonly<Record<string, string>> = {
@@ -107,20 +106,8 @@ export function colorName(color: string | null | undefined): string {
 
 export const DEFAULT_UNIT_COLOR = "#00588e";
 
-export const MNAMES: readonly string[] = [
-  "Leden",
-  "Únor",
-  "Březen",
-  "Duben",
-  "Květen",
-  "Červen",
-  "Červenec",
-  "Srpen",
-  "Září",
-  "Říjen",
-  "Listopad",
-  "Prosinec",
-];
+/** „Leden" … „Prosinec" (capitalised `CS_MONTHS` from dates.ts — the one month-name table). */
+export const MNAMES: readonly string[] = CS_MONTHS.map(capitalize);
 
 /** Unique 3-letter month abbreviations for the yearly chart (DECISIONS #7: Čvn / Čvc). */
 export const MONTH_ABBR: readonly string[] = ["Led", "Úno", "Bře", "Dub", "Kvě", "Čvn", "Čvc", "Srp", "Zář", "Říj", "Lis", "Pro"];

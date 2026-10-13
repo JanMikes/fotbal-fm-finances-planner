@@ -265,3 +265,139 @@ describe("AppStore — requests never overtake the create they depend on", () =>
     expect(order).toEqual(["create", "rename"]);
   });
 });
+
+describe("AppStore — requests on the same entity keep their order", () => {
+  afterEach(() => vi.restoreAllMocks());
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+  function deferred<T = void>() {
+    let resolve!: (v: T) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  it("a second move of the same card waits for the first one (which waits for its column's create)", async () => {
+    const s = new AppStore(async () => state());
+    s.hydrate(state());
+    const sent: string[] = [];
+    const create = deferred();
+    const pc = s.mutate(null, () => (sent.push("create C"), create.promise), { creates: ["C"] });
+    const m1 = s.mutate(null, async () => void sent.push("T → C"), { after: ["T", "C", null] });
+    const m2 = s.mutate(null, async () => void sent.push("T → A"), { after: ["T", "A", null] });
+    await tick();
+    expect(sent).toEqual(["create C"]); // T → A must not overtake T → C
+    create.resolve();
+    await Promise.all([pc, m1, m2]);
+    expect(sent).toEqual(["create C", "T → C", "T → A"]);
+    expect(s.inFlightEntities).toBe(0);
+  });
+
+  it("updates of the same entity are sent one after another, in call order", async () => {
+    const s = new AppStore(async () => state());
+    s.hydrate(state());
+    const sent: string[] = [];
+    const first = deferred();
+    const p1 = s.mutate(null, () => (sent.push("lead=P1"), first.promise), { after: ["T", "P1"] });
+    const p2 = s.mutate(null, async () => void sent.push("lead=P2"), { after: ["T", "P2"] });
+    await tick();
+    expect(sent).toEqual(["lead=P1"]);
+    first.resolve();
+    await Promise.all([p1, p2]);
+    expect(sent).toEqual(["lead=P1", "lead=P2"]);
+  });
+
+  it("a failed request releases the next one on the same entity (no deadlock) and the queue empties", async () => {
+    const s = new AppStore(async () => state());
+    s.hydrate(state());
+    const first = deferred();
+    const p1 = s.mutate(null, () => first.promise, { after: ["T"] });
+    const second = vi.fn(async () => "ok");
+    const p2 = s.mutate(null, second, { after: ["T"] });
+    expect(second).not.toHaveBeenCalled();
+    first.reject(new ApiError(409, "conflict", "Konflikt."));
+    await expect(p1).rejects.toThrow();
+    await expect(p2).resolves.toBe("ok");
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(s.inFlightEntities).toBe(0);
+    expect(s.getSnapshot().pending).toBe(0);
+  });
+
+  it("a request that throws synchronously still settles its tail", async () => {
+    const s = new AppStore(async () => state());
+    s.hydrate(state());
+    const p1 = s.mutate(null, () => {
+      throw new Error("boom");
+    }, { after: ["T"] });
+    await expect(p1).rejects.toThrow();
+    const next = vi.fn(async () => undefined);
+    await s.mutate(null, next, { after: ["T"] });
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(s.inFlightEntities).toBe(0);
+  });
+
+  it("requests on different entities are not serialised (sent synchronously)", async () => {
+    const s = new AppStore(async () => state());
+    s.hydrate(state());
+    const slow = deferred();
+    void s.mutate(null, () => slow.promise, { after: ["T1"] });
+    const other = vi.fn(async () => undefined);
+    void s.mutate(null, other, { after: ["T2", "C1"] });
+    expect(other).toHaveBeenCalledTimes(1);
+    slow.resolve();
+    await tick();
+  });
+
+  it("actions: moveTask twice — the second request reaches the API after the first", async () => {
+    const s = new AppStore(async () => state());
+    s.hydrate(state({ tasks: [task({ id: "t1", columnId: "c1" })] }));
+    const order: string[] = [];
+    const first = deferred<never>();
+    vi.spyOn(api, "moveTask").mockImplementation((id, body) => {
+      order.push(body.columnId);
+      return order.length === 1 ? first.promise : Promise.resolve(task({ id }));
+    });
+    const a = createActions(s);
+    const p1 = a.moveTask("t1", "c2", null);
+    const p2 = a.moveTask("t1", "c1", null);
+    await tick();
+    expect(order).toEqual(["c2"]);
+    first.resolve(task({ id: "t1" }) as never);
+    await Promise.all([p1, p2]);
+    expect(order).toEqual(["c2", "c1"]);
+  });
+});
+
+describe("AppStore — a hung load is replaced after 10 s", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("a refetch while a load is younger than 10 s waits for it; an older load is aborted and replaced", async () => {
+    let now = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const signals: AbortSignal[] = [];
+    let calls = 0;
+    const fetchState = vi.fn((signal?: AbortSignal) => {
+      calls++;
+      if (signal) signals.push(signal);
+      if (calls === 1) {
+        // hangs until aborted
+        return new Promise<ReturnType<typeof state>>((_, rej) => signal?.addEventListener("abort", () => rej(Object.assign(new Error("aborted"), { name: "AbortError" }))));
+      }
+      return Promise.resolve(state());
+    });
+    const s = new AppStore(fetchState);
+    const first = s.load();
+    now += 5_000;
+    void s.load(); // young load → no abort, only a follow-up is queued
+    expect(fetchState).toHaveBeenCalledTimes(1);
+    expect(signals[0].aborted).toBe(false);
+    now += 6_000; // the first load is now 11 s old
+    await s.load();
+    expect(signals[0].aborted).toBe(true);
+    expect(fetchState).toHaveBeenCalledTimes(2);
+    await first;
+    expect(s.getSnapshot().status).toBe("ready");
+  });
+});

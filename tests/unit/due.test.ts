@@ -5,20 +5,22 @@ const now = new Date(2026, 9, 13, 15, 30); // 13. 10. 2026 afternoon
 const NB = "\u00a0";
 
 describe("dueInfo", () => {
-  it("relative labels within ±6 days, short date otherwise; classes unchanged", () => {
-    expect(dueInfo("2026-10-13", false, now)).toMatchObject({ cls: "soon", text: "Dnes", diff: 0 });
-    expect(dueInfo("2026-10-14", false, now)).toMatchObject({ cls: "soon", text: "Zítra", diff: 1 });
-    expect(dueInfo("2026-10-16", false, now)).toMatchObject({ cls: "soon", text: "Za 3 dny", diff: 3 });
-    expect(dueInfo("2026-10-17", false, now)).toMatchObject({ cls: "", text: "Za 4 dny", diff: 4 });
-    expect(dueInfo("2026-10-19", false, now)).toMatchObject({ cls: "", text: "Za 6 dní", diff: 6 });
-    expect(dueInfo("2026-10-20", false, now)).toMatchObject({ cls: "", text: `20.${NB}10.`, diff: 7 });
+  it("always shows the date; a state before it when near or past; classes unchanged", () => {
+    const S = `${NB}· `;
+    expect(dueInfo("2026-10-13", false, now)).toMatchObject({ cls: "soon", state: "Dnes", text: `Dnes${S}13.${NB}10.`, diff: 0 });
+    expect(dueInfo("2026-10-14", false, now)).toMatchObject({ cls: "soon", text: `Zítra${S}14.${NB}10.`, diff: 1 });
+    expect(dueInfo("2026-10-16", false, now)).toMatchObject({ cls: "soon", text: `Za 3 dny${S}16.${NB}10.`, diff: 3 });
+    expect(dueInfo("2026-10-17", false, now)).toMatchObject({ cls: "", text: `Za 4 dny${S}17.${NB}10.`, diff: 4 });
+    expect(dueInfo("2026-10-19", false, now)).toMatchObject({ cls: "", text: `Za 6 dní${S}19.${NB}10.`, diff: 6 });
+    expect(dueInfo("2026-10-20", false, now)).toMatchObject({ cls: "", state: "", date: `20.${NB}10.`, text: `20.${NB}10.`, diff: 7 });
     expect(dueInfo("2027-01-15", false, now)).toMatchObject({ cls: "", text: `15.${NB}1.${NB}2027` });
     const late = dueInfo("2026-10-12", false, now);
-    expect(late).toMatchObject({ cls: "late", text: "Včera", diff: -1 });
-    expect(late.title).toBe(`Termín dokončení: 12.${NB}10.${NB}2026 — po termínu`);
+    expect(late).toMatchObject({ cls: "late", state: "Po termínu", text: `Po termínu${S}12.${NB}10.`, diff: -1 });
+    expect(late.title).toBe(`Termín dokončení: 12.${NB}10.${NB}2026 — po termínu (včera)`);
     expect(late.srText).toBe(late.title);
-    expect(dueInfo("2026-10-08", false, now)).toMatchObject({ cls: "late", text: "Před 5 dny" });
-    expect(dueInfo("2026-09-01", false, now)).toMatchObject({ cls: "late", text: `1.${NB}9.` });
+    expect(dueInfo("2026-10-08", false, now)).toMatchObject({ cls: "late", text: `Po termínu${S}8.${NB}10.` });
+    expect(dueInfo("2026-09-23", false, now)).toMatchObject({ cls: "late", text: `Po termínu${S}23.${NB}9.` });
+    expect(dueInfo("2025-12-01", false, now).text).toBe(`Po termínu${S}1.${NB}12.${NB}2025`);
   });
 
   it("title / srText carry the relative day for upcoming dates", () => {
@@ -40,6 +42,6 @@ describe("dueInfo", () => {
 
   it("is DST safe", () => {
     expect(dueInfo("2026-10-26", false, new Date(2026, 9, 25, 0, 30)).diff).toBe(1);
-    expect(dueInfo("2026-03-30", false, new Date(2026, 2, 28, 23, 0)).text).toBe("Za 2 dny");
+    expect(dueInfo("2026-03-30", false, new Date(2026, 2, 28, 23, 0)).state).toBe("Za 2 dny");
   });
 });

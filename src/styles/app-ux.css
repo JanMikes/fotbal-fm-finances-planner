@@ -16,9 +16,10 @@
   --control-h:44px;
   --control-h-compact:40px;
   --control-fs:15px;
-  --z-modal:200;
   --z-toast:300;
   --z-layer:400;
+  /* magnifier of the search fields (board bars, Select search) */
+  --ic-search:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%2363666b' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='m11 11 3.5 3.5'/%3E%3C/svg%3E");
   --focus-ring-danger:0 0 0 3px rgba(179,38,30,.3);
   --focus-ring-dark:0 0 0 3px rgba(143,214,239,.5);
   /* hover/fallback blue that still carries white text at ≥ 4.5:1 (#0079ab: 4.86:1; DS --blue-500 #007fb4 is 4.47:1) */
@@ -32,34 +33,45 @@
 :focus-visible{outline:2px solid var(--fm-blue);outline-offset:2px}
 /* light ring on navy / steel surfaces */
 .top :focus-visible,.onode.root:focus-visible,.onode.root :focus-visible,.onode.unit:not(.lt):focus-visible,.onode.unit:not(.lt) :focus-visible,.cb-h:focus-visible,.kp.main :focus-visible{outline-color:var(--blue-200)}
-/* text fields show focus with border + ring instead of an outline */
-:where(input:not([type=checkbox],[type=radio],[type=range],[type=file]),select,textarea):focus-visible{outline:0;border-color:var(--fm-blue);box-shadow:var(--focus-ring)}
-.f input:focus,.f select:focus,.f textarea:focus{outline:0;border-color:var(--fm-blue);box-shadow:var(--focus-ring)}
-.cb-in input:focus{outline:0;border-color:var(--fm-blue);box-shadow:var(--focus-ring)}
+/* text fields show focus with border + ring instead of an outline (one rule for every text control incl. the login
+   card; the primitives in ui.css repeat it only where the prototype's specificity needs it) */
+:where(input:not([type=checkbox],[type=radio],[type=range],[type=file]),textarea):focus-visible,
+.f input:focus,.f textarea:focus,
+.search:focus,.search:focus-visible{outline:0;border-color:var(--fm-blue);box-shadow:var(--focus-ring)}
 /* invalid (keeps #b3261e = rgb(179,38,30) — tasks.spec) ; (0,3,1) beats `.f input:focus` */
-.f input[aria-invalid="true"],.f select[aria-invalid="true"],.f textarea[aria-invalid="true"]{border-color:var(--c-danger-ink)}
-.f input[aria-invalid="true"]:focus,.f select[aria-invalid="true"]:focus,.f textarea[aria-invalid="true"]:focus{border-color:var(--c-danger-ink);box-shadow:var(--focus-ring-danger)}
+.f input[aria-invalid="true"],.f textarea[aria-invalid="true"]{border-color:var(--c-danger-ink)}
+.f input[aria-invalid="true"]:focus,.f textarea[aria-invalid="true"]:focus{border-color:var(--c-danger-ink);box-shadow:var(--focus-ring-danger)}
 .modal:focus,.modal:focus-visible{outline:none}
 
 /* ---------- Search fields (#25) ---------- */
 .search{background-color:#fff}
-input.search{padding-left:36px;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%2363666b' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='m11 11 3.5 3.5'/%3E%3C/svg%3E") no-repeat 12px 50%/16px 16px}
-.search:focus,.search:focus-visible{outline:0;border-color:var(--fm-blue);box-shadow:var(--focus-ring);background-color:#fff}
+input.search{padding-left:36px;text-overflow:ellipsis;background:#fff var(--ic-search) no-repeat 12px 50%/16px 16px}
+.search:focus,.search:focus-visible{background-color:#fff}
 /* the prototype's `.search:focus{background:#fff}` shorthand would drop the magnifier — (0,2,1) brings it back */
-input.search:focus{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%2363666b' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='m11 11 3.5 3.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:12px 50%;background-size:16px 16px}
-input.search::-webkit-search-cancel-button{cursor:pointer}
+input.search:focus{background-image:var(--ic-search);background-repeat:no-repeat;background-position:12px 50%;background-size:16px 16px}
+input.search::-webkit-search-cancel-button{cursor:pointer;margin-left:8px}
+
+/* ---------- Suggestion lists (input[list], e.g. „Název kategorie"): our chevron instead of Chrome's black ▼ ---------- */
+.f input[list]{padding-right:38px;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%231b2341' stroke-width='2' stroke-opacity='.75'%3E%3Cpath d='M2 4l4 4 4-4'/%3E%3C/svg%3E") no-repeat right 14px center/12px 12px}
+.f input[list]::-webkit-calendar-picker-indicator{opacity:0;cursor:pointer}
 
 /* ---------- Custom radios / checkboxes (decorative ✓ use CSS alt text `/ ""` so they stay out of accessible names): focusable, clearer checked state (#7 #21) ---------- */
 .budc label,.chkgrid label,.avpick label{position:relative}
 .budc input,.chkgrid input,.avpick input{display:block;position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;opacity:0;pointer-events:none}
-.budc label{padding:0 12px}
+.budc{flex-wrap:wrap}
+.budc label{padding:0 10px}
 .budc label:has(input:checked){background:var(--blue-050);border-color:var(--fm-navy);box-shadow:inset 0 0 0 1px var(--fm-navy);color:var(--fm-navy)}
-.budc label:has(input:checked)::after{content:"✓" / "";font-weight:800;color:var(--fm-navy)}
+/* the ✓ slot is always reserved, so picking a state never changes the segment widths */
+.budc label::after{content:"✓" / "";font-weight:800;color:var(--fm-navy);visibility:hidden}
+.budc label:has(input:checked)::after{visibility:visible}
+/* 3px corners like every other control (the prototype chips are pills) */
+.chkgrid label{border-radius:var(--radius-sm)}
 .chkgrid label:has(input:checked){background:var(--fm-navy);border-color:var(--fm-navy);color:#fff}
 .chkgrid label:has(input:checked)::before{content:"✓" / "";font-weight:800}
 .avpick label:has(input:checked){border-color:var(--fm-navy)}
 .avpick i{position:relative}
-.avpick label:has(input:checked) i::after{content:"✓" / "";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:800;font-style:normal;text-shadow:0 0 2px rgba(18,23,43,.8)}
+/* ✓ colour = the swatch's ink (white or navy, whichever reaches 4.5:1 — set inline from inkOn) */
+.avpick label:has(input:checked) i::after{content:"✓" / "";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:inherit;font-size:15px;font-weight:800;font-style:normal}
 .budc label:has(input:focus-visible),.chkgrid label:has(input:focus-visible){outline:2px solid var(--fm-blue);outline-offset:2px}
 .avpick label:has(input:focus-visible){outline:2px solid var(--fm-blue);outline-offset:1px}
 
@@ -89,7 +101,17 @@ input.search::-webkit-search-cancel-button{cursor:pointer}
   .mf{position:static;padding:10px 16px calc(10px + env(safe-area-inset-bottom))}
   .mf-end{flex:1 1 auto}
   .mf-end .btn.primary{flex:1 1 auto}
-  .mf--slots .mf-start .btn{padding:0 12px;font-size:12px}
+  /* footer ≤ 2 rows: the meta line, then Smazat / Duplikovat as 44px icon buttons (the text stays as their
+     accessible name, visually hidden) on the same row as Zrušit / Uložit */
+  .mf--slots{flex-wrap:wrap}
+  .mf--slots .mf-start{flex:none;flex-wrap:nowrap;gap:8px}
+  .mf--slots .mf-end{flex:1 1 0;flex-wrap:nowrap;min-width:0}
+  .mf--slots .mf-end .btn{padding:0 14px}
+  .mf-start .btn.mf-ic{position:relative;width:44px;min-width:44px;padding:0;font-size:0;letter-spacing:0;gap:0}
+  .mf-start .btn.mf-ic::after{content:"";width:20px;height:20px;background:currentColor;-webkit-mask:var(--ic) no-repeat center/20px 20px;mask:var(--ic) no-repeat center/20px 20px}
+  .mf-start .btn.mf-ic[aria-busy="true"]::after{display:none}
+  .mf-ic--del{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 5.5h13M8 5.5V3.8h4v1.7M5.5 5.5l.8 11h7.4l.8-11M8.5 8.5v5.5M11.5 8.5v5.5'/%3E%3C/svg%3E")}
+  .mf-ic--dup{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Crect x='7' y='7' width='10' height='10' rx='1'/%3E%3Cpath d='M13 7V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h3'/%3E%3C/svg%3E")}
 }
 @media print{.modal{display:block;max-height:none;height:auto}.modal>.mb{overflow:visible}}
 
@@ -97,6 +119,23 @@ input.search::-webkit-search-cancel-button{cursor:pointer}
 @media (pointer:coarse){
   .btn,.search,.tog{min-height:44px}
   .tog input{width:24px;height:24px}
+  .fm-select--filter{min-height:44px}
+  .avpick i{width:34px;height:34px}
+  .chkgrid label{min-height:44px}
+  /* ≥ 16px text in every field, so iOS Safari never zooms into a form */
+  .modal input:not([type=checkbox],[type=radio],[type=file],[type=range]),.modal textarea{font-size:16px}
+  .modal,.fm-sheet{--control-fs:16px}
+}
+/* a tap leaves :hover applied on touch screens — undo the prototype's hover looks there (frozen file) */
+@media (hover:none){
+  .btn.primary:hover{background:var(--fm-blue)}
+  .btn.outline:hover{border-color:var(--grey-300)}
+  .btn.danger:hover{background:transparent}
+  .mh .close:hover,.colh .x:hover{background:transparent}
+  .colh .x:hover{color:var(--grey-500)}
+  .add:hover{background:transparent;color:var(--grey-600);border-color:var(--grey-300)}
+  .addcol:hover{background:transparent;color:var(--grey-600)}
+  .card:hover{border-color:var(--grey-200);box-shadow:none}
 }
 
 /* ---------- Reduced motion (#30) ---------- */

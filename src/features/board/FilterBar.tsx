@@ -1,17 +1,33 @@
 "use client";
 /**
  * Filter bar shell shared by the Úkoly and Tiskoviny boards (prototype `.bar > .sub`):
- *   .bar.fbar#id > .sub > [search] + button.fbar-toggle „Filtry (n)" + .fbar-panel#{id}-panel > [filters] + [after]
+ *   section.bar.fbar#id[aria-label] > .sub > [search] + button.fbar-toggle „Filtry (n)" + .fbar-panel#{id}-panel > [filters] + [after]
  * ≥ 761 px everything sits on one row (the panel is `display: contents`); ≤ 760 px only the search and the
- * „Filtry" toggle are shown and the toggle reveals the panel (aria-expanded / aria-controls).
+ * „Filtry" toggle are shown and the toggle reveals the panel (aria-expanded / aria-controls). Actions that are not
+ * filters (Typy médií, Roční přehled) go into `after`, so they stay visible on phones.
  */
 import { useState, type ReactNode } from "react";
 
-export function FilterBar({ id, search, active, children, after }: { id: string; search: ReactNode; active: number; children: ReactNode; after?: ReactNode }) {
+export function FilterBar({
+  id,
+  label,
+  search,
+  active,
+  children,
+  after,
+}: {
+  id: string;
+  /** Accessible name of the bar's region landmark. */
+  label: string;
+  search: ReactNode;
+  active: number;
+  children: ReactNode;
+  after?: ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const panelId = `${id}-panel`;
   return (
-    <div className="bar fbar" id={id}>
+    <section className="bar fbar" id={id} aria-label={label}>
       <div className="sub">
         {search}
         <button
@@ -28,6 +44,6 @@ export function FilterBar({ id, search, active, children, after }: { id: string;
         </div>
         {after}
       </div>
-    </div>
+    </section>
   );
 }

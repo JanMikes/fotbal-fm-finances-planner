@@ -205,6 +205,7 @@ test.describe("shell", () => {
   });
 
   test("error toast: icon, message, × „Zavřít“", async ({ page }) => {
+    await page.clock.install(); // time flows normally; runFor() below skips the 8 s auto-hide wait
     await openShell(page);
     await page.getByRole("button", { name: "Úkoly", exact: true }).click();
     // every write fails (fulfilled here, the server is never touched) → the store rolls back and toasts
@@ -222,7 +223,7 @@ test.describe("shell", () => {
     await expectNoA11yViolations(page, { include: ".app-toast" });
     // the 8 s auto-hide is paused while the pointer is over the toast
     await toast.hover();
-    await page.waitForTimeout(8500);
+    await page.clock.runFor(8500);
     await expect(toast).toBeVisible();
     await toast.getByRole("button", { name: "Zavřít" }).click();
     await expect(toast).toHaveCount(0);

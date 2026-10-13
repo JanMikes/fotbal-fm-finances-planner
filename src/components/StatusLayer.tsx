@@ -90,7 +90,7 @@ export function StatusLayer() {
         <div className="app-offline" role="status">
           <span className="app-offline__dot" aria-hidden="true" />
           <span className="app-offline__t">Offline</span>
-          <span className="app-offline__d"> – změny ostatních se načtou po obnovení spojení</span>
+          <span className="app-offline__d">– změny ostatních se načtou po obnovení spojení</span>
         </div>
       )}
     </>

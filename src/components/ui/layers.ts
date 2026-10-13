@@ -46,14 +46,6 @@ export function focusNextFrom(from: HTMLElement, backwards: boolean): void {
   (next ?? from).focus();
 }
 
-/** Lowercase, no diacritics — for typeahead and search. */
-export function fold(s: string): string {
-  return s
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase();
-}
-
 /** Text of the `<label for=id>` (without the required star), used as the default sheet title. */
 export function labelTextFor(id: string): string {
   if (typeof document === "undefined") return "";

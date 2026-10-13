@@ -1,12 +1,12 @@
 "use client";
 /**
  * Due / realisation date chip (prototype §7.5 `dueHTML`): grey, `.soon` ≤ 3 days, `.late` overdue, `.done` in the last
- * column. Text „Dnes" / „Za 3 dny" / „Před 2 dny" within ±6 days, else the short date; the full date + state
- * („po termínu", „za 3 dny") is in the tooltip and, for touch / screen readers, in a sibling `.sr-only`.
- * `useToday()` re-renders the chip at local midnight.
+ * column. Always shows the date; before it a state „Po termínu" (overdue) or „Dnes" / „Zítra" / „Za 3 dny" (within
+ * 6 days) — `.due-st`. The full date + state is in the tooltip and, for touch / screen readers, in a sibling
+ * `.sr-only`. `useToday()` re-renders the chip at local midnight.
  */
 import { useToday } from "@/components/ui/useToday";
-import { dueInfo } from "@/lib/due";
+import { DUE_SEP, dueInfo } from "@/lib/due";
 
 export function DueChip({ date, inLastColumn, prefix = "Termín dokončení: " }: { date: string; inLastColumn: boolean; prefix?: string }) {
   const today = useToday();
@@ -14,7 +14,13 @@ export function DueChip({ date, inLastColumn, prefix = "Termín dokončení: " }
   return (
     <>
       <span className={`due ${d.cls}`} title={d.title} aria-hidden="true">
-        {d.text}
+        {d.state ? (
+          <span className="due-st">
+            {d.state}
+            {DUE_SEP}
+          </span>
+        ) : null}
+        {d.date}
       </span>
       <span className="sr-only">{d.srText}</span>
     </>

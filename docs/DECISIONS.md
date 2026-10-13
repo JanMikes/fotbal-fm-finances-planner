@@ -47,8 +47,9 @@ UI wording/look/behaviour = prototype (`prototype.md`) unless listed here.
     (WAI-ARIA APG select-only combobox, date picker dialog; bottom sheets on coarse pointers). No UI library.
 14. Native `confirm` / `alert` / `prompt` are **kept** for destructive actions and the new column name (texts are
     correct; e2e flows depend on `dialog` events). Revisit together with an undo toast.
-15. Brand trade-off: white text on `--fm-blue` (3.25:1) on `.btn.primary`, `.price`, checked `.chkgrid`, `.av` is
-    accepted; it is the only allowlisted axe finding (`expectNoA11yViolations` in `tests/e2e/ui-helpers.ts`).
+15. Brand trade-off: white text on `--fm-blue` (3.25:1) on `.btn.primary` and `.price` is accepted (avatars no
+    longer: their initials come from `inkOn` — white or navy, whichever reaches 4.5:1, so brand-blue avatars have
+    navy initials; checked `.chkgrid` chips are navy); it is the only allowlisted axe finding (`expectNoA11yViolations` in `tests/e2e/ui-helpers.ts`).
     Selected calendar days use `--fm-steel` instead (7.3:1). The trade-off covers the resting brand blue only: the
     primary hover (`--c-blue-strong` #0079ab) and the AVC fallback blue pass 4.5:1.
 16. Dates are formatted by `src/lib/dates.ts` without `Intl` (identical output in an English browser); absolute dates

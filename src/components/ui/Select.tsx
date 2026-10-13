@@ -13,7 +13,8 @@
  * (Space when not searching) / Alt+↑ select, Tab selects and moves on, Esc closes only the popup.
  */
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { fold, focusNextFrom, labelTextFor } from "./layers";
+import { fold } from "@/lib/dates";
+import { focusNextFrom, labelTextFor } from "./layers";
 import { Popover } from "./Popover";
 import { useCoarsePointer } from "./useCoarsePointer";
 
@@ -369,7 +370,7 @@ export function Select({
         data-value={value}
         title={title}
         disabled={disabled}
-        className={`fm-select fm-select--${variant}${invalid ? " is-invalid" : ""}${className ? " " + className : ""}`}
+        className={`fm-select fm-select--${variant}${className ? " " + className : ""}`}
         onClick={() => (open ? close(true) : openList("selected"))}
         onKeyDown={onTriggerKey}
       >

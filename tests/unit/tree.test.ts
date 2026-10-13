@@ -5,7 +5,9 @@ import {
   buildTree,
   childrenOf,
   colorOf,
+  contrastRatio,
   descendantsOf,
+  inkOn,
   isLightColor,
   parentOptions,
   peopleCount,
@@ -83,8 +85,24 @@ describe("tree", () => {
     expect(isLightColor("#C4C8CE")).toBe(true);
     expect(isLightColor("#4fbde4")).toBe(true); // white text would be 2.2:1
     expect(isLightColor("#D98A00")).toBe(true); // 2.8:1
-    expect(isLightColor("#0099cf")).toBe(false);
+    expect(isLightColor("#0099cf")).toBe(true); // white 3.25:1, navy 4.74:1
+    expect(isLightColor("#00588e")).toBe(false);
     expect(isLightColor(null)).toBe(false);
+  });
+
+  it("inkOn: every palette colour gets text with ≥ 4.5:1", () => {
+    for (const c of [...AVC, ...AVPAL]) {
+      const { background, ink } = inkOn(c);
+      const fg = ink === "#fff" ? "#ffffff" : "#1b2341";
+      expect(contrastRatio(background, fg), c).toBeGreaterThanOrEqual(4.5);
+    }
+    // the palette green: neither white (4.38) nor navy (3.5) passes → slightly deeper background, white text
+    const g = inkOn("#1f8a4c");
+    expect(g.ink).toBe("#fff");
+    expect(g.background).not.toBe("#1f8a4c");
+    expect(inkOn("#4fbde4")).toEqual({ background: "#4fbde4", ink: "var(--fm-navy)" });
+    expect(inkOn("var(--fm-blue)")).toEqual({ background: "var(--fm-blue)", ink: "#fff" });
+    expect(contrastRatio("#ffffff", "#000000")).toBeCloseTo(21, 5);
   });
 
   it("buildTree nests and survives cycles in data", () => {

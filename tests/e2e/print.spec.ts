@@ -117,7 +117,7 @@ test("create item with price → column sum and „Celkem“; paid / owed / none
   await expect(page.locator("#ptot")).toHaveText("5 000 Kč");
 
   // month filter by realisation date: label „Celkem za Listopad 2026", option carries the Kč sum
-  expect(await optionText(page, "#pmon", "2026-11")).toMatch(/^Listopad 2026 · [\d\s]+\sKč$/);
+  await expect.poll(() => optionText(page, "#pmon", "2026-11")).toMatch(/^Listopad 2026 · [\d\s]+\sKč$/);
   await pick(page, "#pmon", "2026-11");
   await expect(page.locator("#ptotL")).toHaveText("Celkem za Listopad 2026");
   await expect(page.locator("#board .card h3")).toHaveText([`${TAG} Letáky`]);
@@ -175,7 +175,7 @@ test("Typy médií: add, rename (propagates), delete with confirm (items move to
   await expect(modal.locator(".urow").last().locator("input")).toHaveValue(`${TAG} Pozvánky VIP`);
   await modal.getByRole("button", { name: "Hotovo" }).click();
   await expect(card(page, `${TAG} Pozvánka`).locator(".cat")).toHaveText(`${TAG} Pozvánky VIP`);
-  expect(await optionText(page, "#ptype", typeId)).toBe(`${TAG} Pozvánky VIP (1)`);
+  await expect.poll(() => optionText(page, "#ptype", typeId)).toBe(`${TAG} Pozvánky VIP (1)`);
 
   // delete → confirm → item moves to the first type
   await page.locator("#btnTypes").click();
@@ -212,7 +212,7 @@ test("archived items are hidden from the board and its counts", async ({ page, r
   expect((await request.post(`/api/print/years/${ARCHIVE_YEAR}/close`)).status()).toBe(200);
   await expect(card(page, `${TAG} Archiv`)).toHaveCount(0, { timeout: 10_000 }); // realtime refetch
   await expect(page.locator("#ptot")).toHaveText("0 Kč");
-  expect((await optionTexts(page, "#pmon")).filter((t) => t.startsWith(`Květen ${ARCHIVE_YEAR}`))).toEqual([]);
+  await expect.poll(async () => (await optionTexts(page, "#pmon")).filter((t) => t.startsWith(`Květen ${ARCHIVE_YEAR}`))).toEqual([]);
 });
 
 test("„Roční přehled“ opens the yearly report below the header; back / tab switch closes it", async ({ page }) => {

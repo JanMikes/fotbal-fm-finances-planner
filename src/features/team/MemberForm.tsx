@@ -8,7 +8,7 @@ import { Button, Field, fieldA11y, Modal, MoneyInput, useCloseWhenDeleted } from
 import { AREAS, AVPAL, BUDGET_COLORS, colorName } from "@/lib/constants";
 import { changedFields, isEmptyPatch } from "@/lib/patch";
 import { useActions, useAppState, usePrefs } from "@/lib/store/react";
-import { assignedTaskCount, colorOf, parentOptions } from "@/lib/tree";
+import { assignedTaskCount, colorOf, inkOn, parentOptions } from "@/lib/tree";
 import type { BudgetColor } from "@/lib/types";
 import { assignedTasksLabel } from "./orgText";
 import { ParentSelect } from "./ParentSelect";
@@ -50,7 +50,7 @@ export function MemberForm({ id, parentId, onClose, onOpenMember }: { id: string
     name: ex?.name ?? "",
     role: ex?.role ?? "",
     info: ex?.info ?? "",
-    budget: ex?.budget || null,
+    budget: ex?.budget ?? null,
     color: ex ? ex.avatarColor || colorOf(state.nodes, ex.id) : "",
     budColor: ex?.budgetColor ?? "blue",
     parent: ex ? (ex.parentId ?? "") : (parentId ?? ""),
@@ -121,11 +121,11 @@ export function MemberForm({ id, parentId, onClose, onOpenMember }: { id: string
         ex ? (
           <>
             {ex.id !== prefs.me && (
-              <Button variant="danger" id="mDel" onClick={remove}>
+              <Button variant="danger" id="mDel" className="mf-ic mf-ic--del" onClick={remove}>
                 Odebrat
               </Button>
             )}
-            <Button variant="outline" id="mDup" onClick={duplicate}>
+            <Button variant="outline" id="mDup" className="mf-ic mf-ic--dup" onClick={duplicate}>
               Duplikovat
             </Button>
           </>
@@ -192,7 +192,7 @@ export function MemberForm({ id, parentId, onClose, onOpenMember }: { id: string
             {AVPAL.map((c) => (
               <label key={c} title={c}>
                 <input type="radio" name="avc" value={c} checked={color === c} onChange={() => setColor(c)} aria-label={colorName(c)} />
-                <i style={{ background: c }} />
+                <i style={{ background: c, color: inkOn(c).ink }} />
               </label>
             ))}
           </div>

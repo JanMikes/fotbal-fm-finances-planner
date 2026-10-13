@@ -38,7 +38,8 @@
   .fbar .fbar-panel{display:none}
   .fbar .fbar-panel.is-open{display:flex;flex-direction:column;align-items:stretch;gap:8px;flex:1 1 100%;min-width:0}
   .fbar .fm-select--filter.fbar-sel{width:100%;min-width:0;max-width:none}
-  .fbar .fbar-actions{display:flex;gap:8px}
+  /* Typy médií / Roční přehled: actions, not filters — always visible, one row under the search */
+  .fbar .fbar-actions{display:flex;gap:8px;order:2;flex:1 1 100%}
   .fbar .fbar-actions .btn{flex:1 1 0;min-width:0;padding:0 10px}
   .fbar .ptot{order:3;flex:1 1 100%;margin:0;min-height:36px;justify-content:space-between}
   .fbar .ptot b{font-size:16px}
@@ -65,7 +66,7 @@ body.dragging .board-wrap::before,body.dragging .board-wrap::after{opacity:0}
 @media (min-width:761px){
   .board-wrap>.board{gap:12px}
   .board .col{flex:1 0 248px}
-  .board .addcol{flex:0 0 96px;padding:0 8px;white-space:normal;line-height:1.35}
+  .board .addcol{flex:0 0 auto;min-width:96px;padding:0 10px;white-space:nowrap;font-size:12px;letter-spacing:.04em}
 }
 
 /* =================== Column header =================== */
@@ -86,3 +87,4 @@ body.dragging .board-wrap::before,body.dragging .board-wrap::after{opacity:0}
 .card .due.late{background:var(--c-danger-bg);color:var(--c-danger-ink)}
 .card .price.paid{background:var(--c-ok)}
 .card .price.owed{background:var(--c-danger)}
+.board .colh h2.t{margin:0;line-height:inherit}

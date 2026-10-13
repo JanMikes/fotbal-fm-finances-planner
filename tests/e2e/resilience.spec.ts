@@ -171,7 +171,8 @@ test.describe("mobile", () => {
     await t.start(a.x, a.y);
     await t.moveTo(385, a.y, 6); // right edge (< 60 px) → the board scrolls
     await expect(board).toHaveCSS("scroll-snap-type", "none");
-    await expect.poll(() => board.evaluate((el) => el.scrollLeft), { timeout: 3000 }).toBeGreaterThan(200);
+    // 12 px per frame — generous timeout: a loaded parallel run can drop frames
+    await expect.poll(() => board.evaluate((el) => el.scrollLeft), { timeout: 10_000 }).toBeGreaterThan(200);
     await expect(page.locator("body > .card.ghost")).toBeVisible(); // still dragging, not scrolling
     await t.moveTo(200, a.y, 4); // away from the edge
     await t.end();
@@ -274,6 +275,42 @@ test("an unchanged print item saves without a PATCH; only a changed price is sen
   await expect(modal).toHaveCount(0);
   await expect.poll(() => patches.length).toBe(1);
   expect(JSON.parse(patches[0])).toEqual({ price: 5200 });
+});
+
+test("task modal: unchanged save sends no PATCH; a typed date commits on Ctrl+Enter; invalid date text blocks the save", async ({ page, request }) => {
+  const cols = columnsOf(await getState(request), "tasks");
+  const id = await createTask(request, { columnId: cols[0].id, title: `${TAG} Same`, dueDate: "2026-11-20", description: "Popis" });
+  await openTasks(page);
+  const patches: string[] = [];
+  page.on("request", (r) => {
+    if (r.method() === "PATCH" && r.url().includes(`/api/tasks/${id}`)) patches.push(r.postData() ?? "");
+  });
+  const modal = page.getByTestId("task-modal");
+  await card(page, `${TAG} Same`).click();
+  await expect(modal.locator("#fDue")).toHaveValue("pá 20. 11. 2026");
+  // tab through every field without changing anything
+  await modal.locator("#fDue").focus();
+  await modal.locator("#fDesc").focus();
+  await modal.getByRole("button", { name: "Uložit" }).click();
+  await expect(modal).toHaveCount(0);
+
+  // invalid text: the save is blocked, the field says why and keeps the text
+  await card(page, `${TAG} Same`).click();
+  await modal.locator("#fDue").fill("31. 2.");
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await expect(modal).toBeVisible();
+  await expect(modal.locator("#fDue")).toHaveAttribute("aria-invalid", "true");
+  await expect(modal.locator("#fDue-rel")).toHaveText("Datum nerozpoznáno");
+  await expect(modal.locator("#fDue")).toHaveValue("31. 2.");
+  await modal.getByRole("button", { name: "Uložit" }).click();
+  await expect(modal).toBeVisible();
+  expect(patches).toEqual([]);
+  // a short date („24. 12. 26" is only complete on Enter / blur) is committed by Ctrl+Enter itself
+  await modal.locator("#fDue").fill("24. 12. 26");
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await expect(modal).toHaveCount(0);
+  await expect.poll(() => patches.length).toBe(1);
+  expect(JSON.parse(patches[0])).toEqual({ dueDate: "2026-12-24" });
 });
 
 test("a failed refetch is retried: the client catches up and shows „Offline“ meanwhile (no raw proxy text)", async ({ page, request }) => {

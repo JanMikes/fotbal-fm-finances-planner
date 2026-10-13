@@ -2,8 +2,8 @@
 /**
  * Tiskoviny filter bar (prototype §9.1): search, type select with counts, month select with Kč sums, „Typy médií",
  * „Roční přehled" (opens the yearly report) and the red „Celkem …" box. Archived items are excluded everywhere
- * (DECISIONS #9). One row from 900 px; on mobile the selects and buttons sit behind „Filtry" and the total gets
- * its own slim row. „/" focuses the search.
+ * (DECISIONS #9). One row from 900 px; on mobile the selects sit behind „Filtry", the two buttons get their own row
+ * (they are actions, not filters) and the total a slim row. „/" focuses the search.
  */
 import { Select } from "@/components/ui/Select";
 import { FilterBar } from "@/features/board/FilterBar";
@@ -26,13 +26,14 @@ export function PrintBar({ q, onQ, total, onTypes, onYear }: { q: string; onQ: (
   return (
     <FilterBar
       id="pbar"
+      label="Hledání a filtry tiskovin"
       active={active}
       search={
         <input
           className="search"
           id="pq"
           type="search"
-          placeholder="Hledat v tiskovinách…"
+          placeholder="Hledat…"
           aria-label="Hledat v tiskovinách"
           aria-keyshortcuts="/"
           autoComplete="off"
@@ -42,6 +43,14 @@ export function PrintBar({ q, onQ, total, onTypes, onYear }: { q: string; onQ: (
       }
       after={
         <>
+          <div className="fbar-actions">
+            <button className="btn outline" id="btnTypes" type="button" onClick={onTypes}>
+              Typy médií
+            </button>
+            <button className="btn outline" id="btnYear" type="button" onClick={onYear}>
+              Roční přehled
+            </button>
+          </div>
           <div className="ptot">
             <span id="ptotL">{printTotalLabel(month)}</span> <b id="ptot">{kcs(total)}</b>
           </div>
@@ -71,14 +80,6 @@ export function PrintBar({ q, onQ, total, onTypes, onYear }: { q: string; onQ: (
         onChange={(v) => updatePrefs({ prMonth: v })}
         options={months.map((m) => ({ value: m.value, label: m.label }))}
       />
-      <div className="fbar-actions">
-        <button className="btn outline" id="btnTypes" type="button" onClick={onTypes}>
-          Typy médií
-        </button>
-        <button className="btn outline" id="btnYear" type="button" onClick={onYear}>
-          Roční přehled
-        </button>
-      </div>
     </FilterBar>
   );
 }

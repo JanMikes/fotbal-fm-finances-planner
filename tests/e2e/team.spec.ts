@@ -61,17 +61,33 @@ async function nodeOf(req: APIRequestContext, id: string): Promise<Node | undefi
 
 /** Mouse drag from the centre of `from` to a fraction (fx, fy) of `to`'s box. */
 async function drag(page: Page, from: Locator, to: Locator, fx = 0.5, fy = 0.5) {
+  // a tree wider than the view (other spec files add root members in parallel) scrolls horizontally, and the drag
+  // autoscrolls within 60 px of its edges — centre the target first so the pointer never rests in that zone
+  await to.evaluate((el) => {
+    if (el.closest("#tree")) el.scrollIntoView({ block: "nearest", inline: "center" });
+  });
   await from.scrollIntoViewIfNeeded();
   const a = (await from.boundingBox())!;
   await page.mouse.move(a.x + a.width / 2, a.y + 20);
   await page.mouse.down();
   await page.mouse.move(a.x + a.width / 2 + 12, a.y + 30, { steps: 3 });
   await expect(page.locator("body")).toHaveClass(/odrag/);
+  // measure the target only after the drag has re-rendered the tree (the dragged card turns into the placeholder,
+  // which can shift its siblings — under a loaded parallel run that render may land after the first moves)
+  await expect(page.locator(".onode.ghost")).toHaveCount(1);
+  await expect(from).toHaveClass(/\bph\b/);
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   const b = (await to.boundingBox())!;
   await page.mouse.move(b.x + b.width * fx, b.y + b.height * fy, { steps: 8 });
   return {
     tip: page.locator("#oTip"),
     drop: async () => {
+      // other spec files add / remove nodes in parallel; their realtime refetch can reflow the tree between the hover
+      // and the drop — aim at the target's current position again before releasing
+      const now = await to.boundingBox().catch(() => null);
+      if (now && (Math.abs(now.x - b.x) > 1 || Math.abs(now.y - b.y) > 1)) {
+        await page.mouse.move(now.x + now.width * fx, now.y + now.height * fy, { steps: 2 });
+      }
       await page.mouse.up();
       // let the optimistic move, the API call and the reconciling refetch settle before measuring again
       await page.waitForLoadState("networkidle");
@@ -182,7 +198,10 @@ test.describe("Struktura týmu", () => {
     await u.locator(".plus").click();
     await expect(modal.locator("h2")).toHaveText("Nový člen");
     await expect(page.locator("#mBoss")).toHaveText(name);
-    await expectValue(page.locator("#mBoss"), (await state(page.request)).nodes.find((n) => n.name === name)!.id);
+    // the unit form saves optimistically and closes at once — wait until the create has reached the server
+    const unitId = async () => (await state(page.request)).nodes.find((n) => n.name === name)?.id;
+    await expect.poll(unitId).toBeTruthy();
+    await expectValue(page.locator("#mBoss"), (await unitId())!);
     const child = `E2E Pod ${sfx()}`;
     await page.locator("#mName").fill(child);
     await modal.getByRole("button", { name: "Přidat člena" }).click();
@@ -290,6 +309,33 @@ test.describe("Struktura týmu", () => {
     expect(s.nodes.find((n) => n.id === a.id)?.parentId).toBe(u.id);
 
     await cleanup(req, [b.id, ...ids.filter((x) => x !== b.id)]);
+  });
+
+  test("an unchanged member form saves without a PATCH; tabbing through the budget sends nothing; one change = one field", async ({ page }) => {
+    const req = page.request;
+    const k = sfx();
+    const m = await createNode(req, { kind: "person", name: `Same ${k}`, role: "Web", budget: 0, areas: ["Web", "Video"] });
+    await openTeam(page);
+    const patches: string[] = [];
+    page.on("request", (r) => {
+      if (r.method() === "PATCH" && r.url().includes(`/api/org-nodes/${m.id}`)) patches.push(r.postData() ?? "");
+    });
+    const modal = page.locator(".modal");
+    await card(page, `Same ${k}`).locator(".nm").click();
+    await expect(modal.locator("#mName")).toHaveValue(`Same ${k}`);
+    await expect(modal.locator("#mBud")).toHaveValue("0"); // 0 stays 0 (not „empty")
+    await modal.locator("#mBud").focus();
+    await modal.locator("#mRole").focus(); // focus + blur of the amount without typing
+    await modal.getByRole("button", { name: "Uložit" }).click();
+    await expect(modal).toHaveCount(0);
+
+    await card(page, `Same ${k}`).locator(".nm").click();
+    await modal.locator("#mBud").fill("25 000");
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await expect(modal).toHaveCount(0);
+    await expect.poll(() => patches.length).toBe(1);
+    expect(JSON.parse(patches[0])).toEqual({ budget: 25000 });
+    await cleanup(req, [m.id]);
   });
 
   test("removing a member reparents its children and clears task assignment", async ({ page }) => {
@@ -528,7 +574,7 @@ test.describe("Struktura týmu", () => {
     await expect.poll(async () => (await nodeOf(req, boss.id))?.parentId).toBe(u.id);
     // the child's form offers the boss's role as meta
     await card(page, `Dítě ${k}`).locator(".nm").click();
-    expect(await optionTexts(page, "#mBoss")).toContain(`Šéf ${k} Role ${k}`);
+    await expect.poll(() => optionTexts(page, "#mBoss")).toContain(`Šéf ${k} Role ${k}`);
     await page.keyboard.press("Escape");
     await cleanup(req, [u.id, boss.id, kid.id, other.id]);
   });

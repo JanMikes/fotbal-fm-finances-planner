@@ -24,6 +24,7 @@ export function TaskBar({ q, onQ }: { q: string; onQ: (q: string) => void }) {
   return (
     <FilterBar
       id="tbar"
+      label="Hledání a filtry úkolů"
       active={active}
       search={
         <input

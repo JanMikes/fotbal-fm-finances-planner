@@ -161,6 +161,13 @@ test("columns: add (prompt), rename inline, delete with confirm", async ({ page,
     expect(d.defaultValue()).toBe("Nový sloupec");
     void d.accept(`  ${TAG} Sloupec  `);
   });
+  // hold the create ~600 ms, so the rename below really is typed while the create is still in flight
+  let releaseCreate = () => {};
+  const createHeld = new Promise<void>((res) => (releaseCreate = res));
+  await page.route("**/api/columns", async (r) => {
+    if (r.request().method() === "POST") await Promise.race([createHeld, new Promise((res) => setTimeout(res, 600))]);
+    await r.continue();
+  });
   await page.locator("#addCol").click();
   await expect(column(page, `${TAG} Sloupec`)).toHaveCount(1);
   await expect(page.locator("#board .col").last().locator(".t")).toHaveText(`${TAG} Sloupec`);
@@ -175,6 +182,8 @@ test("columns: add (prompt), rename inline, delete with confirm", async ({ page,
   await expect(column(page, `${TAG} Přejmenováno`)).toHaveCount(1);
   await expect.poll(async () => columnsOf(await getState(request), "tasks").some((c) => c.title === `${TAG} Přejmenováno`)).toBe(true);
   await expect(page.locator(".app-toast")).toHaveCount(0);
+  releaseCreate();
+  await page.unroute("**/api/columns");
 
   // empty rename restores the old title
   await column(page, `${TAG} Přejmenováno`).locator(".t").click();
@@ -296,7 +305,7 @@ test("filters: group (with counts), month, search, Jen moje úkoly", async ({ pa
   const cards = page.locator("#board .card h3");
   await expect(cards).toHaveCount(3);
 
-  expect(await optionText(page, "#grp", "Muži")).toMatch(/^Muži \(\d+\)$/);
+  await expect.poll(() => optionText(page, "#grp", "Muži")).toMatch(/^Muži \(\d+\)$/);
   await pick(page, "#grp", "Muži");
   await expect(cards).toHaveText([`${TAG} Flt muži`]);
   await pick(page, "#grp", "Vše");

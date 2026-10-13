@@ -11,7 +11,7 @@ import { columnsOf } from "@/lib/filters";
 import { ini } from "@/lib/format";
 import type { View } from "@/lib/prefs";
 import { usePrefs, useStoreSnapshot } from "@/lib/store/react";
-import { colorOf, isLightColor, personsInOrder } from "@/lib/tree";
+import { colorOf, inkOn, personsInOrder } from "@/lib/tree";
 import { Select, type SelectOption } from "./ui";
 import { useUi } from "./UiContext";
 
@@ -102,7 +102,7 @@ export function Header() {
 }
 
 function IdentitySelect() {
-  const { state } = useStoreSnapshot();
+  const { state, status } = useStoreSnapshot();
   const [prefs, updatePrefs] = usePrefs();
   const nodes = state?.nodes;
   const persons = useMemo(() => (nodes ? personsInOrder(nodes) : []), [nodes]);
@@ -111,7 +111,7 @@ function IdentitySelect() {
     [persons],
   );
   const empty = persons.length === 0;
-  const placeholder = !state ? "Načítám…" : "Žádní členové";
+  const placeholder = state ? "Žádní členové" : status === "error" ? "Nenačteno" : "Načítám…";
 
   return (
     <div className="who-box">
@@ -147,8 +147,9 @@ function IdentitySelect() {
 
 /** Decorative avatar inside the identity trigger (the trigger's text already carries the name). */
 function WhoAvatar({ color, name }: { color: string; name: string }) {
+  const { background, ink } = inkOn(color);
   return (
-    <span className="av who-av" aria-hidden="true" style={{ background: color, color: isLightColor(color) ? "var(--fm-navy)" : "#fff" }}>
+    <span className="av who-av" aria-hidden="true" style={{ background, color: ink }}>
       {ini(name)}
     </span>
   );

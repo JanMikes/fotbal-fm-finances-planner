@@ -13,6 +13,8 @@
 .top .brand h1{white-space:nowrap}
 .top .brand-short,.top .tabs .tab-short{display:none}
 .top .tabs button{white-space:nowrap}
+/* the tab fills the header height — an outside ring would be clipped to two thin vertical lines */
+.top .tabs button:focus-visible{outline-offset:-4px}
 .top .tools{flex-wrap:nowrap;flex:none}
 .who-box{display:flex;align-items:center;gap:8px;min-width:0}
 .who-l{font-size:12px;font-weight:600;color:var(--text-on-dark-muted);white-space:nowrap;cursor:pointer}
@@ -81,19 +83,18 @@
 .app-skel i{display:block;background:var(--grey-200);border-radius:var(--radius-sm);animation:app-skel-pulse 1.4s ease-in-out infinite}
 .app-skel__bar{display:flex;gap:10px;align-items:center;padding:12px 26px;background:#fff;border-bottom:1px solid var(--grey-200)}
 .app-skel__ctl{width:200px;height:40px}
-.app-skel__ctl--search{width:320px;background:var(--grey-100)!important}
-.app-skel__bar .app-skel__ctl{height:40px}
+.app-skel i.app-skel__ctl--search{width:320px;background:var(--grey-100)}
 .app-skel__board{display:flex;gap:16px;padding:20px;overflow:hidden}
 .app-skel__col{flex:1 0 248px;max-width:320px;display:flex;flex-direction:column;gap:10px;padding:14px 12px;background:var(--grey-100);border-radius:var(--radius-md);min-height:420px}
 .app-skel__col .app-skel__head{width:55%;height:14px;margin:4px 0 6px;background:var(--grey-300)}
 .app-skel__col .app-skel__card{height:96px;background:#fff;border:1px solid var(--grey-200);border-radius:var(--radius-md)}
 .app-skel__org{display:flex;flex-direction:column;align-items:center;gap:40px;padding:48px 20px}
 .app-skel__row{display:flex;gap:24px;flex-wrap:wrap;justify-content:center}
-.app-skel__node{width:220px;height:84px;background:#fff!important;border:1px solid var(--grey-200);border-radius:var(--radius-md)}
-.app-skel__node--root{background:var(--grey-300)!important;border-color:var(--grey-300)}
+.app-skel i.app-skel__node{width:220px;height:84px;background:#fff;border:1px solid var(--grey-200);border-radius:var(--radius-md)}
+.app-skel i.app-skel__node--root{background:var(--grey-300);border-color:var(--grey-300)}
 @media (max-width:760px){
   .app-skel__bar{padding:10px 14px}
-  .app-skel .app-skel__ctl{flex:none;width:96px}.app-skel .app-skel__ctl--search{flex:1;width:auto}.app-skel .app-skel__ctl--2{display:none}
+  .app-skel .app-skel__ctl{flex:none;width:96px}.app-skel i.app-skel__ctl--search{flex:1;width:auto}.app-skel .app-skel__ctl--2{display:none}
   .app-skel__board{padding:12px 14px;gap:10px}
   .app-skel__col{flex:0 0 86vw}
 }
@@ -108,7 +109,7 @@
 .app-err__card .btn{min-width:180px}
 
 /* =================== Error toast (failed mutation, already rolled back by the store) =================== */
-.app-toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:300;display:flex;align-items:center;gap:12px;width:max-content;max-width:min(560px,calc(100vw - 32px));background:var(--fm-navy);color:#fff;border-left:4px solid var(--c-danger);border-radius:var(--radius-sm);padding:8px 6px 8px 14px;font-size:14px;font-weight:600;line-height:1.4;box-shadow:0 14px 32px rgba(27,35,65,.25);animation:fm-fade .12s ease-out}
+.app-toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:var(--z-toast);display:flex;align-items:center;gap:12px;width:max-content;max-width:min(560px,calc(100vw - 32px));background:var(--fm-navy);color:#fff;border-left:4px solid var(--c-danger);border-radius:var(--radius-sm);padding:8px 6px 8px 14px;font-size:14px;font-weight:600;line-height:1.4;box-shadow:0 14px 32px rgba(27,35,65,.25);animation:fm-fade .12s ease-out}
 .app-toast::before{content:"!" / "";flex:none;width:22px;height:22px;border-radius:50%;background:var(--c-danger);color:#fff;font-size:13px;font-weight:900;line-height:22px;text-align:center}
 .app-toast__msg{flex:1 1 auto;min-width:0;padding:4px 0}
 .app-toast__x{position:relative;flex:none;width:36px;height:36px;padding:0;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--text-on-dark-muted);cursor:pointer}
@@ -126,9 +127,9 @@
 }
 
 /* =================== Offline pill (realtime connection lost) =================== */
-.app-offline{position:fixed;left:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:300;display:flex;align-items:center;gap:8px;max-width:calc(100vw - 24px);background:var(--c-warn-bg);color:var(--c-warn-ink);border:1px solid var(--c-warn);border-radius:var(--radius-pill);padding:6px 14px 6px 10px;font-size:13px;font-weight:600;line-height:1.3;box-shadow:0 6px 18px rgba(27,35,65,.14)}
+.app-offline{position:fixed;left:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:var(--z-toast);display:flex;align-items:center;gap:8px;max-width:calc(100vw - 24px);background:var(--c-warn-bg);color:var(--c-warn-ink);border:1px solid var(--c-warn);border-radius:var(--radius-sm);padding:6px 14px 6px 10px;font-size:13px;font-weight:600;line-height:1.3;box-shadow:0 6px 18px rgba(27,35,65,.14)}
 .app-offline__dot{flex:none;width:10px;height:10px;border-radius:50%;background:var(--c-warn);box-shadow:0 0 0 3px rgba(217,138,0,.25)}
 .app-offline__t{font-weight:800;letter-spacing:.06em;text-transform:uppercase;font-size:12px}
-@media (max-width:760px){.app-offline{right:12px;border-radius:var(--radius-md)}}
+@media (max-width:760px){.app-offline{right:12px}}
 @media print{.app-toast,.app-offline{display:none!important}}
 @media (prefers-reduced-motion:reduce){.app-skel i{animation:none}}

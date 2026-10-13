@@ -1,9 +1,8 @@
 /** Formatting / parsing helpers ported from the prototype (prototype.md §5). Pure, locale cs-CZ. */
-import { MNAMES } from "./constants";
-import { plural } from "./dates";
+import { formatMonth, NBSP, plural, toIsoDate } from "./dates";
 
-/** Non-breaking space: thousands separator and number–unit gap, so „15 000 Kč" never wraps. */
-export const NBSP = "\u00a0";
+/** Non-breaking space (defined in `dates.ts`): thousands separator and number–unit gap, so „15 000 Kč" never wraps. */
+export { NBSP };
 
 /** cs-CZ number with thousands separated by U+00A0 (ICU may emit U+00A0 or U+202F; both are normalised). */
 export function nf(n: number): string {
@@ -81,18 +80,13 @@ export function pluralize(n: number, one: string, few: string, many: string): st
   return nf(n) + " " + plural(n, one, few, many);
 }
 
-const pad2 = (n: number) => String(n).padStart(2, "0");
-
 /** "YYYY-MM" of a local date. */
 export function monthKey(d: Date): string {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
+  return toIsoDate(d).slice(0, 7);
 }
 
-/** `Říjen 2026` from "2026-10" (prototype `monLab`). */
-export function monLab(m: string): string {
-  const [y, mo] = m.split("-");
-  return MNAMES[Number(mo) - 1] + " " + y;
-}
+/** `Říjen 2026` from "2026-10" (prototype `monLab`; one month table: `dates.ts` `formatMonth`). */
+export const monLab = formatMonth;
 
 /** Link URL normalisation: trim, prepend https:// when there is no scheme (prototype `addLink`); `mailto:` is kept. */
 export function normalizeUrl(raw: string): string {

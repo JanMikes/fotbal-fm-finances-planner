@@ -31,14 +31,21 @@ async function closeSelect(page: Page, trigger: Target): Promise<void> {
   await expect(t).toHaveAttribute("aria-expanded", "false");
 }
 
-/** Opens the Select and clicks the option with `data-value=value` (filters via the search field when needed). */
+/**
+ * Opens the Select and clicks the option with `data-value=value`. Retried: other spec files change the data in
+ * parallel, and a realtime refetch can re-render the option list (e.g. month options with counts) between locating
+ * the option and the click.
+ */
 export async function pick(page: Page, trigger: Target, value: string): Promise<void> {
   const t = loc(page, trigger);
-  const lb = await openSelect(page, t);
-  const opt = lb.locator(`[role="option"][data-value="${value.replace(/"/g, '\\"')}"]`);
-  if ((await opt.count()) === 0) throw new Error(`pick: no option with value "${value}"`);
-  await opt.click();
-  await expect(t).toHaveAttribute("data-value", value);
+  await expect(async () => {
+    if ((await t.getAttribute("data-value")) === value && (await t.getAttribute("aria-expanded")) !== "true") return;
+    const lb = await openSelect(page, t);
+    const opt = lb.locator(`[role="option"][data-value="${value.replace(/"/g, '\\"')}"]`);
+    if ((await opt.count()) === 0) throw new Error(`pick: no option with value "${value}"`);
+    await opt.click({ timeout: 3000 });
+    await expect(t).toHaveAttribute("data-value", value, { timeout: 1000 });
+  }).toPass({ timeout: 10_000 });
 }
 
 /** Opens the Select and clicks the first option whose text matches. */
@@ -108,8 +115,8 @@ export async function pickMonth(page: Page, trigger: Target, ym: string): Promis
 
 /**
  * axe-core scan; fails on serious/critical violations (WCAG 2.x A/AA + best practices).
- * The documented brand trade-off — white text on `--fm-blue` (#0099cf, 3.25:1: `.btn.primary`, `.price`, checked
- * `.chkgrid`, `.av`) — is allowlisted unless `allowBrandBlue: false`.
+ * The documented brand trade-off — white text on `--fm-blue` (#0099cf, 3.25:1: `.btn.primary`, `.price`) — is
+ * allowlisted unless `allowBrandBlue: false`.
  */
 export async function expectNoA11yViolations(
   page: Page,

@@ -42,6 +42,13 @@ export interface PopoverProps {
 const GAP = 4;
 const MARGIN = 8;
 
+/** Height the layer would have without a max-height: its box plus whatever its scrollers (itself, children) hide. */
+function naturalHeight(el: HTMLElement): number {
+  let h = el.offsetHeight + Math.max(0, el.scrollHeight - el.clientHeight);
+  for (const c of Array.from(el.children)) h += Math.max(0, c.scrollHeight - c.clientHeight);
+  return h;
+}
+
 export function Popover({
   anchor,
   open,
@@ -76,9 +83,10 @@ export function Popover({
       const r = a.getBoundingClientRect();
       const vw = document.documentElement.clientWidth;
       const vh = window.innerHeight;
-      el.style.maxHeight = `${maxHeight}px`;
       if (matchWidth) el.style.minWidth = `${Math.round(r.width)}px`;
-      const natural = el.offsetHeight;
+      // natural height without resetting max-height (a reset would re-layout and clamp the list's scroll position)
+      if (!el.style.maxHeight) el.style.maxHeight = `${maxHeight}px`;
+      const natural = Math.min(maxHeight, naturalHeight(el));
       const below = vh - r.bottom - GAP - MARGIN;
       const above = r.top - GAP - MARGIN;
       const up = below < natural && above > below;
@@ -99,7 +107,12 @@ export function Popover({
     };
     place();
     const onMove = () => place();
-    window.addEventListener("scroll", onMove, true);
+    // scrolling inside the layer (option list, calendar) does not move the anchor
+    const onScroll = (e: Event) => {
+      if (e.target instanceof Node && ref.current?.contains(e.target)) return;
+      place();
+    };
+    window.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", onMove);
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(onMove) : null;
     if (ro && ref.current) {
@@ -107,7 +120,7 @@ export function Popover({
       if (anchor.current) ro.observe(anchor.current);
     }
     return () => {
-      window.removeEventListener("scroll", onMove, true);
+      window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onMove);
       ro?.disconnect();
     };

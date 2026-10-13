@@ -4,12 +4,12 @@
  *   <Button variant="primary" busy={saving} onClick={save}>Uložit</Button>
  *
  * Defaults to `type="button"`. `busy` disables the button and sets `aria-busy` (CSS spinner, label unchanged).
- * Variants: primary · secondary (navy) · outline · ghost · danger · onDark; size sm (32px) | md; `icon` = square
+ * Variants: primary · outline · ghost · danger; size sm (32px; 44px on touch) | md; `icon` = square
  * icon button (give it an aria-label); `block` = full width.
  */
 import type { ComponentPropsWithRef } from "react";
 
-export type ButtonVariant = "primary" | "secondary" | "outline" | "ghost" | "danger" | "onDark";
+export type ButtonVariant = "primary" | "outline" | "ghost" | "danger";
 
 export type ButtonProps = ComponentPropsWithRef<"button"> & {
   variant?: ButtonVariant;
@@ -19,7 +19,7 @@ export type ButtonProps = ComponentPropsWithRef<"button"> & {
   block?: boolean;
 };
 
-export function buttonClass({ variant = "outline", size = "md", icon = false, block = false }: Pick<ButtonProps, "variant" | "size" | "icon" | "block"> = {}): string {
+function buttonClass({ variant = "outline", size = "md", icon = false, block = false }: Pick<ButtonProps, "variant" | "size" | "icon" | "block"> = {}): string {
   return "btn " + variant + (size === "sm" ? " sm" : "") + (icon ? " icon" : "") + (block ? " block" : "");
 }
 

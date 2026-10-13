@@ -4,11 +4,13 @@
  *
  *   <MoneyInput id="fPrice" value={price} onChange={setPrice} suffix="Kč" />
  *
- * Markup: `.fm-money > input#id[inputmode=numeric] + span.fm-money__sfx[aria-hidden]`. Keeps its own text while
- * focused and reports `parseDigits(text)` (number | null) on every keystroke; on blur the text is reformatted
- * with NBSP thousands („4 500"). While not focused it always mirrors the prop (realtime updates).
+ * Markup: `.fm-money > input#id[inputmode=numeric] + span.fm-money__sfx[aria-hidden]`. Mirrors the prop (realtime
+ * updates) until the user types; from the first keystroke it keeps its own text (letters are dropped as you type)
+ * and reports `parseDigits(text)` (number | null) on every keystroke; on blur the text is reformatted with NBSP
+ * thousands („4 500"). Focus / blur without typing never calls `onChange`, so tabbing through a field cannot write
+ * a stale value back over someone else's change.
  */
-import { useState, type FocusEvent } from "react";
+import { useRef, useState } from "react";
 import { nf, parseDigits } from "@/lib/format";
 
 export interface MoneyInputProps {
@@ -31,11 +33,14 @@ export interface MoneyInputProps {
   className?: string;
 }
 
-export function formatAmount(n: number | null | undefined, zeroAsEmpty = false): string {
+function formatAmount(n: number | null | undefined, zeroAsEmpty: boolean): string {
   if (n === null || n === undefined) return "";
   if (zeroAsEmpty && n === 0) return "";
   return nf(n);
 }
+
+/** Keeps digits, spaces and a decimal separator (parseDigits drops a trailing „,50"); everything else is dropped. */
+const cleanAmount = (text: string) => text.replace(/[^\d\s\u00a0\u202f.,]/g, "");
 
 export function MoneyInput({
   id,
@@ -54,12 +59,14 @@ export function MoneyInput({
   className,
 }: MoneyInputProps) {
   const [draft, setDraft] = useState<string | null>(null);
+  /** The user typed since focusing (only then does blur report the value). */
+  const dirty = useRef(false);
   const shown = draft ?? formatAmount(value, zeroAsEmpty);
 
   return (
     <div
       className={
-        "fm-money" + (compact ? " fm-money--compact" : "") + (suffix ? " has-sfx" : "") + (invalid ? " is-invalid" : "") + (className ? " " + className : "")
+        "fm-money" + (compact ? " fm-money--compact" : "") + (suffix ? " has-sfx" : "") + (className ? " " + className : "")
       }
     >
       <input
@@ -74,17 +81,22 @@ export function MoneyInput({
         aria-invalid={invalid || undefined}
         aria-label={ariaLabel}
         aria-describedby={describedBy}
-        onFocus={(e: FocusEvent<HTMLInputElement>) => {
-          setDraft(e.currentTarget.value);
+        onFocus={() => {
+          dirty.current = false;
           onFocus?.();
         }}
         onChange={(e) => {
-          setDraft(e.target.value);
-          onChange(parseDigits(e.target.value));
+          const text = cleanAmount(e.target.value);
+          dirty.current = true;
+          setDraft(text);
+          onChange(parseDigits(text));
         }}
-        onBlur={(e) => {
-          const n = parseDigits(e.currentTarget.value);
-          if (n !== value) onChange(n);
+        onBlur={() => {
+          if (dirty.current && draft !== null) {
+            const n = parseDigits(draft);
+            if (n !== value) onChange(n);
+          }
+          dirty.current = false;
           setDraft(null);
           onBlur?.();
         }}

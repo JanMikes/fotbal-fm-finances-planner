@@ -6,7 +6,8 @@
  *     <div class="mf">[span.meta] [.mf-start] [.mf-end]</div></div></div>
  *
  * Behaviour (WAI-ARIA APG modal dialog): initial focus = `initialFocus` (skipped on coarse pointers so the
- * keyboard does not pop up) or the dialog; focus returns to the opener on unmount; Tab / Shift+Tab cycle inside;
+ * keyboard does not pop up) or the dialog; focus returns to the opener on unmount (a modal opened from inside
+ * another one — „Duplikovat" — inherits that modal's opener, since its own trigger goes away); Tab / Shift+Tab cycle inside;
  * focus that escapes is pulled back, except into body-portalled layers (`[data-fm-layer]`) and the toast.
  * Escape and Ctrl/Cmd+Enter (→ `onSubmit`) are handled on `window` and ignored when a layer already handled the
  * event (`defaultPrevented`); with stacked modals only the topmost reacts. Pointerdown on the overlay closes,
@@ -15,7 +16,7 @@
  * Lives inside #modalRoot (sibling of .app) so the print stylesheet keeps working: either rendered there by the
  * caller (ModalHost) or, with `portal`, portalled there from anywhere (team forms).
  */
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { isLayerDismiss, tabbables } from "./layers";
 import { isCoarsePointer } from "./useCoarsePointer";
@@ -44,18 +45,26 @@ export interface ModalProps {
 
 /** Open modals, topmost last. */
 const stack: symbol[] = [];
+/** Dialog element → the element focus returns to when it closes. */
+const openerOf = new WeakMap<Element, HTMLElement | null>();
 
 export function Modal({ title, onClose, children, foot, footStart, meta, onSubmit, initialFocus, testId, portal = false, size = "md" }: ModalProps) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const [token] = useState(() => Symbol("modal"));
   // the element that had focus when the modal opened (read once, before children can autofocus)
-  const [opener] = useState<HTMLElement | null>(() =>
-    typeof document !== "undefined" && document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null,
-  );
+  const [openers] = useState<{ own: HTMLElement | null; inherited: HTMLElement | null }>(() => {
+    if (typeof document === "undefined") return { own: null, inherited: null };
+    const ae = document.activeElement;
+    const own = ae instanceof HTMLElement && ae !== document.body ? ae : null;
+    const host = own?.closest(".modal");
+    return { own, inherited: host ? (openerOf.get(host) ?? null) : null };
+  });
   const closeRef = useRef(onClose);
   const submitRef = useRef(onSubmit);
-  useEffect(() => {
+  // layout effect: a field that commits its value with flushSync on Ctrl+Enter (DateInput) must be seen by the
+  // window-level submit handler that runs right after it
+  useLayoutEffect(() => {
     closeRef.current = onClose;
     submitRef.current = onSubmit;
   }, [onClose, onSubmit]);
@@ -66,6 +75,7 @@ export function Modal({ title, onClose, children, foot, footStart, meta, onSubmi
   useEffect(() => {
     stack.push(token);
     const dlg = dialogRef.current;
+    if (dlg) openerOf.set(dlg, openers.inherited ?? openers.own);
     if (dlg && !dlg.contains(document.activeElement)) {
       const target = initialFocus && !isCoarsePointer() ? dlg.querySelector<HTMLElement>(initialFocus) : null;
       (target ?? dlg).focus({ preventScroll: true });
@@ -73,11 +83,12 @@ export function Modal({ title, onClose, children, foot, footStart, meta, onSubmi
     return () => {
       const i = stack.indexOf(token);
       if (i >= 0) stack.splice(i, 1);
-      if (opener?.isConnected) opener.focus({ preventScroll: true });
+      const back = openers.own?.isConnected ? openers.own : openers.inherited;
+      if (back?.isConnected) back.focus({ preventScroll: true });
     };
     // initialFocus is read on open only
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, opener]);
+  }, [token, openers]);
 
   // Escape / Ctrl+Enter on window (bubble phase: after React handlers had the chance to preventDefault)
   useEffect(() => {

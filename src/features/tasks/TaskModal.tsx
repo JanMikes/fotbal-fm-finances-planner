@@ -89,6 +89,8 @@ export function TaskModal({
   const [draft, setDraft] = useState<AttachmentDraft>(emptyDraft);
   const [titleErr, setTitleErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** The date field holds text that is not a date („Datum nerozpoznáno") — saving is blocked until it is fixed. */
+  const [dateBad, setDateBad] = useState(false);
   const [dupBusy, setDupBusy] = useState(false);
   const titleRef = useRef<HTMLInputElement | null>(null);
 
@@ -113,6 +115,10 @@ export function TaskModal({
     if (!title) {
       setTitleErr(TITLE_REQUIRED);
       titleRef.current?.focus();
+      return;
+    }
+    if (dateBad) {
+      document.getElementById("fDue")?.focus(); // its hint says „Datum nerozpoznáno"
       return;
     }
     const fields = taskFields(f);
@@ -175,10 +181,10 @@ export function TaskModal({
       footStart={
         ex ? (
           <>
-            <Button variant="danger" id="del" onClick={remove}>
+            <Button variant="danger" id="del" className="mf-ic mf-ic--del" onClick={remove}>
               Smazat
             </Button>
-            <Button variant="outline" id="dup" busy={dupBusy} onClick={duplicate}>
+            <Button variant="outline" id="dup" className="mf-ic mf-ic--dup" busy={dupBusy} onClick={duplicate}>
               Duplikovat
             </Button>
           </>
@@ -217,7 +223,7 @@ export function TaskModal({
           />
         </Field>
         <Field label="Předpokládaný termín dokončení" htmlFor="fDue">
-          <DateInput id="fDue" value={f.dueDate} onChange={(v) => set("dueDate", v)} />
+          <DateInput id="fDue" value={f.dueDate} onChange={(v) => set("dueDate", v)} onValidityChange={(ok) => setDateBad(!ok)} />
         </Field>
         <Field label="Popis" htmlFor="fDesc" wide>
           <textarea id="fDesc" placeholder="Co je potřeba udělat, termíny, formáty…" value={f.description} onChange={(e) => set("description", e.target.value)} />

@@ -5,7 +5,7 @@ import { Button, Field, fieldA11y, Modal, useCloseWhenDeleted } from "@/componen
 import { AVPAL, colorName, DEFAULT_UNIT_COLOR, UNIT_NAME_SUGGESTIONS } from "@/lib/constants";
 import { changedFields, isEmptyPatch } from "@/lib/patch";
 import { useActions, useAppState } from "@/lib/store/react";
-import { parentOptions } from "@/lib/tree";
+import { inkOn, parentOptions } from "@/lib/tree";
 import { ParentSelect } from "./ParentSelect";
 
 export function UnitForm({ id, parentId, onClose }: { id: string | null; parentId: string | null; onClose: () => void }) {
@@ -74,10 +74,10 @@ export function UnitForm({ id, parentId, onClose }: { id: string | null; parentI
       footStart={
         ex ? (
           <>
-            <Button variant="danger" id="uDel" onClick={remove}>
+            <Button variant="danger" id="uDel" className="mf-ic mf-ic--del" onClick={remove}>
               Smazat
             </Button>
-            <Button variant="outline" id="uDup" onClick={duplicate}>
+            <Button variant="outline" id="uDup" className="mf-ic mf-ic--dup" onClick={duplicate}>
               Duplikovat
             </Button>
           </>
@@ -127,7 +127,7 @@ export function UnitForm({ id, parentId, onClose }: { id: string | null; parentI
             {AVPAL.map((c) => (
               <label key={c} title={c}>
                 <input type="radio" name="ucol" value={c} checked={color === c} onChange={() => setColor(c)} aria-label={colorName(c)} />
-                <i style={{ background: c }} />
+                <i style={{ background: c, color: inkOn(c).ink }} />
               </label>
             ))}
           </div>

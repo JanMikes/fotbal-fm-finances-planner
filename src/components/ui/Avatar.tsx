@@ -2,12 +2,13 @@
 /**
  * Person avatar circle (prototype `av(id, lead)`, §7.4). Unassigned / deleted person → grey „–".
  * Exposed as `role="img"` named by its title („Vedoucí: Petra Horáková"); the visible initials stay the only text
- * inside `.av` (tests read them). Light colours (`LIGHT`) get navy initials.
+ * inside `.av` (tests read them). The initials are white or navy, whichever reaches 4.5:1 on the colour (`inkOn`;
+ * a colour where neither does is deepened slightly).
  * `label` overrides the accessible name / tooltip; `label={false}` makes it decorative (`aria-hidden`, tooltip kept) —
  * e.g. on org cards where the name is printed right next to it.
  */
 import { ini } from "@/lib/format";
-import { colorOf, isLightColor } from "@/lib/tree";
+import { colorOf, inkOn } from "@/lib/tree";
 import type { OrgNode } from "@/lib/types";
 
 export function Avatar({
@@ -33,11 +34,11 @@ export function Avatar({
       </span>
     );
   }
-  const bg = colorOf(nodes, person.id);
+  const { background, ink } = inkOn(colorOf(nodes, person.id));
   return (
     <span
       className={`av${lead ? " lead" : ""}`}
-      style={{ background: bg, color: isLightColor(bg) ? "var(--fm-navy)" : "#fff" }}
+      style={{ background, color: ink }}
       title={name}
       {...a11y}
     >

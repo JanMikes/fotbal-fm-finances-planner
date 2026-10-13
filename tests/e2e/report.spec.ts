@@ -121,7 +121,7 @@ test.describe.serial("yearly print report", () => {
     const sel = page.locator("#yrSel");
     await expectValue(sel, String(YEAR));
     await expect(sel).toHaveAccessibleName("Rok");
-    expect(await optionTexts(page, "#yrSel")).toContain(String(YEAR));
+    await expect.poll(() => optionTexts(page, "#yrSel")).toContain(String(YEAR));
     const current = String(new Date().getFullYear());
     // keyboard: open, Home (the newest year — years are DESC), Enter
     await sel.focus();
@@ -152,7 +152,7 @@ test.describe.serial("yearly print report", () => {
     expect(dialogText).toBe(`Uzavřít rok ${YEAR}? 4 položky za 7\u00a0500\u00a0Kč se přesunou do archivu.`); // amounts use non-breaking spaces
     await expect(page.locator(".yv-st")).toContainText("Uzavřeno");
     // the year list marks closed years
-    expect(await optionText(page, "#yrSel", String(YEAR))).toBe(`${YEAR} uzavřeno`);
+    await expect.poll(() => optionText(page, "#yrSel", String(YEAR))).toBe(`${YEAR} uzavřeno`);
     await expect(page.locator("#yrOpen")).toHaveText("Znovu otevřít");
     // the report still shows the (now archived) items
     await expect(page.locator(".yv-kpi .kp").first().locator("b")).toHaveText("7 500 Kč");

@@ -1,5 +1,5 @@
 /** Org tree helpers (prototype §10.4–10.11). Pure functions over the flat `OrgNode[]` list. */
-import { AVC, GROUPS, LIGHT } from "./constants";
+import { AVC, GROUPS } from "./constants";
 import { inGroup } from "./filters";
 import type { OrgNode, Task } from "./types";
 
@@ -97,9 +97,52 @@ export function colorOf(nodes: readonly OrgNode[], id: string | null | undefined
   return AVC[idx % AVC.length];
 }
 
-/** Colour needs dark (navy) text. */
+const NAVY = "#1b2341";
+const AA = 4.5;
+
+function rgbOf(hex: string): [number, number, number] | null {
+  const m = /^#?([0-9a-f]{6}|[0-9a-f]{3})$/i.exec(hex.trim());
+  if (!m) return null;
+  const h = m[1].length === 3 ? [...m[1]].map((c) => c + c).join("") : m[1];
+  return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)) as [number, number, number];
+}
+
+function luminance([r, g, b]: [number, number, number]): number {
+  const lin = (v: number) => (v / 255 <= 0.03928 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+/** WCAG contrast ratio of two hex colours (1–21). */
+export function contrastRatio(a: string, b: string): number {
+  const x = rgbOf(a);
+  const y = rgbOf(b);
+  if (!x || !y) return 1;
+  const [hi, lo] = [luminance(x), luminance(y)].sort((p, q) => q - p);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/**
+ * Text colour for a filled colour (avatars, swatch ✓): white when it reaches 4.5:1, else navy when navy does, else
+ * white on a slightly deepened background (`background` differs from the input only then — e.g. the palette green
+ * #1f8a4c, where white is 4.38:1 and navy 3.5:1). Unknown values (CSS variables) keep white.
+ */
+export function inkOn(color: string | null | undefined): { background: string; ink: string } {
+  const bg = color ?? "";
+  const rgb = rgbOf(bg);
+  if (!rgb || contrastRatio(bg, "#ffffff") >= AA) return { background: bg, ink: "#fff" };
+  if (contrastRatio(bg, NAVY) >= AA) return { background: bg, ink: "var(--fm-navy)" };
+  let [r, g, b] = rgb;
+  let deep = bg;
+  for (let i = 0; i < 20 && contrastRatio(deep, "#ffffff") < AA; i++) {
+    [r, g, b] = [r, g, b].map((v) => Math.round(v * 0.96)) as [number, number, number];
+    deep = "#" + [r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("");
+  }
+  return { background: deep, ink: "#fff" };
+}
+
+/** Colour needs dark (navy) text (white would be below 4.5:1 and navy reaches it). */
 export function isLightColor(color: string | null | undefined): boolean {
-  return !!color && LIGHT.has(color.toLowerCase());
+  return inkOn(color).ink !== "#fff";
 }
 
 /** Nested tree for rendering. */

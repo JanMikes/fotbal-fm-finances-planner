@@ -59,6 +59,26 @@ describe("parseCzDate", () => {
     expect(parseCzDate("+30", now)).toBe("2026-11-12");
   });
 
+  it("requireYear (while typing): only input that cannot grow into another date", () => {
+    for (const [text, iso] of [
+      ["1.2.2027", "2027-02-01"],
+      ["1. 2. 2027", "2027-02-01"],
+      ["út 3. 11. 2026", "2026-11-03"],
+      ["2026-11-20", "2026-11-20"],
+      ["5. června 2027", "2027-06-05"],
+      ["dnes", "2026-10-13"],
+      ["zítra", "2026-10-14"],
+    ]) {
+      expect(parseCzDate(text, now, { requireYear: true }), text).toBe(iso);
+    }
+    for (const partial of ["1.2.20", "1.2.", "1. 2", "15.1", "24.12.27", "+3", "-2", "2026-11-2", "5. června", "3. listopadu 202"]) {
+      expect(parseCzDate(partial, now, { requireYear: true }), partial).toBeNull();
+    }
+    // the same text is accepted on blur
+    expect(parseCzDate("1.2.20", now)).toBe("2020-02-01");
+    expect(parseCzDate("+3", now)).toBe("2026-10-16");
+  });
+
   it("implicit year: this year, next year when the date is more than 60 days past", () => {
     expect(parseCzDate("1. 9.", now)).toBe("2026-09-01"); // 42 days ago → still this year
     expect(parseCzDate("1. 8.", now)).toBe("2027-08-01"); // 73 days ago → next year
@@ -85,7 +105,6 @@ describe("parseCzDate", () => {
 describe("parseCzMonth", () => {
   it.each([
     ["2026-10", "2026-10"],
-    ["2026-3", "2026-03"],
     ["10/2026", "2026-10"],
     ["10.2026", "2026-10"],
     ["10. 2026", "2026-10"],
@@ -99,6 +118,12 @@ describe("parseCzMonth", () => {
   ])("%s → %s", (text, ym) => {
     expect(parseCzMonth(text, now)).toBe(ym);
     expect(parseCzMonth(text, now, { requireYear: true })).toBe(ym);
+  });
+
+  it("a 1-digit ISO month only on blur (2026-1 is on the way to 2026-10)", () => {
+    expect(parseCzMonth("2026-3", now)).toBe("2026-03");
+    expect(parseCzMonth("2026-1", now, { requireYear: true })).toBeNull();
+    expect(parseCzMonth("2026-01", now, { requireYear: true })).toBe("2026-01");
   });
 
   it("bare month name = current year, but not while typing (requireYear)", () => {

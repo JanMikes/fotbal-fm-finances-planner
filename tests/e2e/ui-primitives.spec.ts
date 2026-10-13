@@ -5,6 +5,8 @@ import { expectNoA11yViolations, expectValue, optionText, optionTexts, pick, pic
 
 const TOKEN = process.env.APP_ACCESS_TOKEN ?? "dev-token";
 const NB = " ";
+/** Wait that ends a typeahead word (Select buffer: 500 ms) — with a CI-safe margin. */
+const TYPEAHEAD_RESET_MS = 1100;
 
 async function openLab(page: Page): Promise<void> {
   await page.goto(`/k/${TOKEN}`);
@@ -49,12 +51,12 @@ test.describe("desktop", () => {
     expect(await activeValue(page, "#labCol")).toBe("c1");
     await page.keyboard.press("r");
     expect(await activeValue(page, "#labCol")).toBe("c3"); // Rozpracováno
-    await page.waitForTimeout(600);
+    await page.waitForTimeout(TYPEAHEAD_RESET_MS);
     await page.keyboard.press("k");
     expect(await activeValue(page, "#labCol")).toBe("c4"); // next „k…" after the active one: Ke schválení
     await page.keyboard.press("k");
     expect(await activeValue(page, "#labCol")).toBe("c2"); // repeated char cycles: K řešení
-    await page.waitForTimeout(600);
+    await page.waitForTimeout(TYPEAHEAD_RESET_MS);
     await page.keyboard.type("ke s");
     expect(await activeValue(page, "#labCol")).toBe("c4"); // multi-char (space inside the buffer does not select)
     await page.keyboard.press("Enter");
@@ -63,7 +65,7 @@ test.describe("desktop", () => {
     await expect(t).toBeFocused();
     await expect(page.locator("#out-labCol")).toHaveText("c4");
     // closed typeahead opens on the match; Alt+↑ selects
-    await page.waitForTimeout(600);
+    await page.waitForTimeout(TYPEAHEAD_RESET_MS);
     await page.keyboard.press("h");
     await expect(t).toHaveAttribute("aria-expanded", "true");
     expect(await activeValue(page, "#labCol")).toBe("c5");
@@ -93,7 +95,7 @@ test.describe("desktop", () => {
 
     await pick(page, "#labCat", "Dorost U17");
     await expect(page.locator("#out-labCat")).toHaveText("Dorost U17");
-    expect(await optionText(page, "#labMon", "all")).toBe("Všechny měsíce");
+    await expect.poll(() => optionText(page, "#labMon", "all")).toBe("Všechny měsíce");
     const texts = await optionTexts(page, "#labCol");
     expect(texts).toEqual(["Nápady", "K řešení", "Rozpracováno", "Ke schválení", "Hotovo"]);
   });
@@ -261,21 +263,43 @@ test.describe("desktop", () => {
     await expect(input).toHaveValue("út 3. 11. 2026");
     await expect(input).toHaveAttribute("aria-describedby", /labDate-rel/);
 
+    // complete input (4-digit year, ISO, keywords) is committed while typing
     for (const [text, iso] of [
       ["1.2.2027", "2027-02-01"],
       ["1. 2. 2027", "2027-02-01"],
       ["15/3/2027", "2027-03-15"],
-      ["24.12.27", "2027-12-24"],
       ["2027-06-30", "2027-06-30"],
       ["5. června 2027", "2027-06-05"],
       ["dnes", today],
       ["zítra", addDays(today, 1)],
-      ["+3", addDays(today, 3)],
     ] as const) {
       await input.fill(text);
-      await expect(out, text).toHaveText(iso); // committed while typing
+      await expect(out, text).toHaveText(iso);
       await expectValue(input, iso);
     }
+    // input that could still grow („24.12.27" → 2027?, „+3" → „+30") is committed on Enter / blur only
+    for (const [text, iso] of [
+      ["24.12.27", "2027-12-24"],
+      ["+3", addDays(today, 3)],
+    ] as const) {
+      const before = await out.textContent();
+      await input.fill(text);
+      await expect(out, text).toHaveText(before ?? "");
+      await input.press("Enter");
+      await expect(out, text).toHaveText(iso);
+    }
+    // typing a date digit by digit never commits a half-typed one (1.2.20 → 2020) on the way
+    await input.fill("");
+    await page.evaluate(() => {
+      const el = document.getElementById("out-labDate")!;
+      const log: string[] = [];
+      (window as unknown as { __outLog: string[] }).__outLog = log;
+      new MutationObserver(() => log.push(el.textContent ?? "")).observe(el, { childList: true, characterData: true, subtree: true });
+    });
+    await input.pressSequentially("1.2.2028");
+    await expect(out).toHaveText("2028-02-01");
+    const seen = await page.evaluate(() => (window as unknown as { __outLog: string[] }).__outLog);
+    expect(seen.filter((v) => v !== "2028-02-01" && v !== "∅")).toEqual([]);
     await setDate(input, "3.11.2026");
     await expect(input).toHaveValue("út 3. 11. 2026");
     await expect(out).toHaveText("2026-11-03");
@@ -375,7 +399,7 @@ test.describe("desktop", () => {
     await input.fill("blbost");
     await input.press("Tab");
     await expect(out).toHaveText(`${year}-12`);
-    await expect(page.locator("#labMonth-err")).toHaveText("Měsíc nerozpoznán");
+    await expect(page.locator("#labMonth-msg")).toHaveText("Měsíc nerozpoznán");
 
     await pickMonth(page, "#labMonth", "2025-02");
     await expect(input).toHaveValue("Únor 2025");

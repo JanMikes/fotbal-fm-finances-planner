@@ -77,6 +77,7 @@ export function PrintTypesModal({ onClose }: { onClose: () => void }) {
                 data-ti={t.id}
                 defaultValue={t.name}
                 aria-label={`Název typu ${t.name}`}
+                title="Přejmenovat — upravte název a potvrďte Enterem"
                 autoComplete="off"
                 onBlur={(e) => rename(e.currentTarget, t.id, t.name)}
                 onKeyDown={(e) => {

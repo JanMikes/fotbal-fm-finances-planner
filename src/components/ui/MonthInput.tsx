@@ -1,18 +1,19 @@
 "use client";
 /**
- * Czech month field („Říjen 2026"), value "YYYY-MM" | "" — same pattern as DateInput.
+ * Czech month field („Říjen 2026"), value "YYYY-MM" | "" — same pattern as DateInput (shared usePickerField).
  *
  *   <MonthInput id="cbFrom" value={ym} onChange={setYm} compact placeholder="od měsíce…" aria-label="Splátka od" />
  *
  * Typing commits only a full match with a 4-digit year („2026-10", „10/2026", „10.2026", „říjen 2026"), so a
- * half-typed month is never saved; blur/Enter also accept a bare month name (current year). Unparseable text
- * reverts with „Měsíc nerozpoznán". The popup has a year header ‹ › and a 3×4 month grid
+ * half-typed month („2026-1") is never saved; blur/Enter also accept a bare month name (current year). Unparseable
+ * text reverts with „Měsíc nerozpoznán" (`#{id}-msg`). The popup has a year header ‹ › and a 3×4 month grid
  * (←/→ ±1, ↑/↓ ±3, Home/End row, PgUp/PgDn ±1 year, Enter/Space pick) plus „Tento měsíc" / „Vymazat".
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { addMonths, capitalize, CS_MONTHS, formatMonth, parseCzMonth, toIsoDate, type IsoMonth } from "@/lib/dates";
 import { Popover } from "./Popover";
 import { useCoarsePointer } from "./useCoarsePointer";
+import { usePickerField } from "./usePickerField";
 import { useToday } from "./useToday";
 
 export interface MonthInputProps {
@@ -31,8 +32,6 @@ export interface MonthInputProps {
   className?: string;
 }
 
-const ERROR_MS = 4000;
-
 export function MonthInput({
   id,
   value,
@@ -49,62 +48,21 @@ export function MonthInput({
   const coarse = useCoarsePointer();
   const boxRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [draft, setDraft] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const f = usePickerField({
+    inputRef,
+    value,
+    onChange,
+    format: formatMonth,
+    parseLive: (t) => parseCzMonth(t, today, { requireYear: true }),
+    parseCommit: (t) => parseCzMonth(t, today),
+    clearable,
+    disabled,
+    invalidText: "Měsíc nerozpoznán",
+    requiredText: "Vyberte měsíc",
+  });
 
-  useEffect(() => {
-    if (!err) return;
-    const t = setTimeout(() => setErr(null), ERROR_MS);
-    return () => clearTimeout(t);
-  }, [err]);
-
-  const shown = draft ?? (value ? formatMonth(value) : "");
-
-  const onType = (text: string) => {
-    setDraft(text);
-    setErr(null);
-    if (!text.trim()) {
-      if (clearable && value) onChange("");
-      return;
-    }
-    const ym = parseCzMonth(text, today, { requireYear: true });
-    if (ym && ym !== value) onChange(ym);
-  };
-
-  const settle = () => {
-    if (draft === null) return;
-    if (draft.trim()) {
-      const ym = parseCzMonth(draft, today);
-      if (ym) {
-        if (ym !== value) onChange(ym);
-      } else setErr("Měsíc nerozpoznán");
-    } else if (!clearable) {
-      setErr("Vyberte měsíc");
-    }
-    setDraft(null);
-  };
-
-  const close = (refocus = true) => {
-    setOpen(false);
-    if (refocus) inputRef.current?.focus({ preventScroll: true });
-  };
-
-  const pick = (ym: string) => {
-    if (ym !== value) onChange(ym);
-    setDraft(null);
-    setErr(null);
-    close();
-  };
-
-  const openPicker = () => {
-    if (disabled) return;
-    settle();
-    setOpen(true);
-  };
-
-  const errId = `${id}-err`;
-  const describedby = [describedBy, err ? errId : null].filter(Boolean).join(" ") || undefined;
+  const msgId = `${id}-msg`;
+  const describedby = [describedBy, f.error ? msgId : null].filter(Boolean).join(" ") || undefined;
 
   return (
     <div className={"fm-month" + (compact ? " fm-month--compact" : "") + (className ? " " + className : "")}>
@@ -117,65 +75,44 @@ export function MonthInput({
           autoComplete="off"
           spellCheck={false}
           placeholder={placeholder}
-          value={shown}
+          value={f.shown}
           data-value={value}
           readOnly={coarse}
           disabled={disabled}
           aria-label={ariaLabel}
           aria-describedby={describedby}
-          onChange={(e) => onType(e.target.value)}
-          onBlur={settle}
+          onChange={(e) => f.onType(e.target.value)}
+          onBlur={() => f.settle()}
           onClick={() => {
-            if (coarse) openPicker();
+            if (coarse) f.openPicker();
           }}
-          onKeyDown={(e) => {
-            if (e.key === "ArrowDown" && e.altKey) {
-              e.preventDefault();
-              openPicker();
-            } else if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) {
-              settle();
-            }
-          }}
+          onKeyDown={f.onKeyDown}
         />
         <button
           type="button"
-          className="fm-date__btn fm-date__btn--month"
+          className="fm-date__btn"
           aria-label="Vybrat měsíc"
           aria-haspopup="dialog"
-          aria-expanded={open}
+          aria-expanded={f.open}
           disabled={disabled}
           tabIndex={coarse ? -1 : 0}
-          onClick={() => (open ? close() : openPicker())}
+          onClick={() => (f.open ? f.close() : f.openPicker())}
         />
       </div>
-      <div id={errId} className="fm-date__hint is-error" role="status">
-        {err ?? ""}
+      <div id={msgId} className="fm-date__hint is-error" role="status">
+        {f.error ?? ""}
       </div>
       <Popover
         anchor={boxRef}
-        open={open}
-        onClose={(reason) => close(reason !== "outside")}
+        open={f.open}
+        onClose={(reason) => f.close(reason !== "outside")}
         label="Vybrat měsíc"
         role="dialog"
         trapFocus
         className="fm-date-pop"
         maxHeight={420}
       >
-        <MonthGrid
-          value={value}
-          current={toIsoDate(today).slice(0, 7)}
-          autoFocus={!coarse}
-          onPick={pick}
-          onClear={
-            clearable
-              ? () => {
-                  if (value) onChange("");
-                  setDraft(null);
-                  close();
-                }
-              : undefined
-          }
-        />
+        <MonthGrid value={value} current={toIsoDate(today).slice(0, 7)} autoFocus={!coarse} onPick={f.pick} onClear={clearable ? () => f.pick("") : undefined} />
       </Popover>
     </div>
   );

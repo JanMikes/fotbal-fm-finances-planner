@@ -108,10 +108,14 @@ export function Board<T extends BoardItem>(props: BoardProps<T>) {
           return (
             <section key={c.id} className={`col${drag?.overCol === c.id ? " over" : ""}`} data-col={c.id}>
               <div className="colh">
+                {/* column titles are the h2 level between the page h1 and the card h3s */}
                 {columnEditing ? (
-                  <ColumnTitle title={c.title} onRename={(t) => columnEditing.onRename(c.id, t)} />
+                  <>
+                    <h2 className="sr-only">{c.title}</h2>
+                    <ColumnTitle title={c.title} onRename={(t) => columnEditing.onRename(c.id, t)} />
+                  </>
                 ) : (
-                  <span className="t">{c.title}</span>
+                  <h2 className="t">{c.title}</h2>
                 )}
                 <span className="c">{original.length}</span>
                 {columnExtra?.(c, original)}

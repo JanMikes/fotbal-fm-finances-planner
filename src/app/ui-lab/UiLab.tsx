@@ -6,6 +6,7 @@ import { AREAS, AVPAL, BUDGET_COLORS, CATEGORY_OPTGROUPS, colorName } from "@/li
 import { addDays, formatMonth, toIsoDate } from "@/lib/dates";
 import { dueInfo } from "@/lib/due";
 import { kcs } from "@/lib/format";
+import { inkOn } from "@/lib/tree";
 import type { OrgNode } from "@/lib/types";
 import "./ui-lab.css";
 
@@ -105,7 +106,6 @@ export function UiLab() {
         <h2 id="s-btn">Tlačítka</h2>
         <div className="uilab-row">
           <Button variant="primary">Uložit</Button>
-          <Button variant="secondary">Sekundární</Button>
           <Button variant="outline">Zrušit</Button>
           <Button variant="ghost">Ghost</Button>
           <Button variant="danger">Smazat</Button>
@@ -134,7 +134,6 @@ export function UiLab() {
           </Button>
         </div>
         <div className="uilab-row uilab-dark">
-          <Button variant="onDark">Na tmavé</Button>
           <Button variant="primary">+ Nový úkol</Button>
           <Select id="labDark" variant="onDark" aria-label="Přihlášen" value={me} onChange={setMe} options={PEOPLE.slice(1)} />
         </div>
@@ -245,7 +244,7 @@ export function UiLab() {
               {AVPAL.map((c) => (
                 <label key={c} title={c}>
                   <input type="radio" name="labAvc" value={c} checked={swatch === c} onChange={() => setSwatch(c)} aria-label={colorName(c)} />
-                  <i style={{ background: c }} />
+                  <i style={{ background: c, color: inkOn(c).ink }} />
                 </label>
               ))}
             </div>
