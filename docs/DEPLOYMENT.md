@@ -9,7 +9,7 @@ its secrets.
 
 | | |
 |---|---|
-| Production URL | `https://marketing.fotbal-fm.thedevs.cz` |
+| Production URL | `https://marketing.fotbal-fm.cz` |
 | Slug (everywhere) | `fotbal-fm-finances-planner`: lily `apps/<slug>/`, `/srv/<slug>/` on the box, compose project, webhook hook id, Infisical project |
 | Image | `ghcr.io/janmikes/fotbal-fm-finances-planner` (tags `sha-<full git sha>`, `main`, `latest`) |
 | Production compose + deploy script | `TheDevs-cz/lily.srv` → `apps/fotbal-fm-finances-planner/{compose.yaml,deploy.sh}` (private infra repo, **not** this repo) |
@@ -60,8 +60,10 @@ lily: webhook receiver (non-root) verifies the HMAC and spools the job → root 
   gate: there is deliberately no Traefik load-balancer check on a single replica. The blackbox
   monitor probes it too. lily alerts automatically on an unhealthy container, a failed probe, or an
   expiring certificate.
-- **TLS:** Traefik `le-dns` resolver (ACME DNS-01 via Cloudflare). The certificate issues whatever
-  the DNS record points at; the CNAME only decides where traffic goes.
+- **TLS:** Traefik `le` resolver (ACME HTTP-01) for `marketing.fotbal-fm.cz` (Webglobe DNS), so the
+  DNS record must point at lily before the certificate can issue. The legacy host
+  `marketing.fotbal-fm.thedevs.cz` keeps a `le-dns` (Cloudflare DNS-01) cert and a router that
+  308-redirects to the new domain (path + query kept, so old magic links still work).
 
 ### What lily expects from the image (checked by the `e2e` job)
 - Listens on `0.0.0.0:3000` and starts with `node server.js` (Next.js standalone). Runs as uid **1001**,
@@ -157,7 +159,7 @@ lands before steps 1–6, the deploy fails.
      |---|---|---|
      | `POSTGRES_PASSWORD` | `openssl rand -hex 32` | **Hex only**: it goes into `DATABASE_URL` unescaped. The DB is initialised with it on the first deploy. |
      | `APP_PASSWORD` | chosen by the owner (**min 8 chars**), or `openssl rand -base64 18` | The shared team password for `/login`. |
-     | `APP_ACCESS_TOKEN` | `openssl rand -hex 24` (**min 32 chars**) | The magic link is `https://marketing.fotbal-fm.thedevs.cz/k/<APP_ACCESS_TOKEN>`. Keep it URL-safe (hex). |
+     | `APP_ACCESS_TOKEN` | `openssl rand -hex 24` (**min 32 chars**) | The magic link is `https://marketing.fotbal-fm.cz/k/<APP_ACCESS_TOKEN>`. Keep it URL-safe (hex). |
      | `SESSION_SECRET` | `openssl rand -hex 32` (**min 32 chars**) | Part of the HMAC key for the 1-year access cookie. |
 
      `DATABASE_URL` is **not** an Infisical key: the lily `compose.yaml` builds it from
@@ -166,7 +168,10 @@ lands before steps 1–6, the deploy fails.
    - Verify on the box: `source /srv/deploy/lib.sh && dump_secrets fotbal-fm-finances-planner`
      must report **4 key(s)**. It prints a count, never values.
 
-4. **[HUMAN] Cloudflare DNS** (zone `thedevs.cz`): add a record
+4. **[HUMAN] DNS.** Current production domain (since 2026-10-13): Webglobe zone `fotbal-fm.cz`,
+   `marketing.fotbal-fm.cz. 60 CNAME fotbal-fm.cz.` (→ lily). It must resolve to lily before the
+   first deploy (HTTP-01). The original setup below is kept for the legacy redirect host —
+   Cloudflare zone `thedevs.cz`: a record
    **`CNAME marketing.fotbal-fm` → `lily.srv.thedevs.cz`**, proxy status **DNS only (grey cloud)**,
    TTL Auto. Today the name falls through to the zone wildcard `*.thedevs.cz`, which points at the
    old server (spare), so the explicit record is required. Keep it DNS-only: Traefik terminates TLS
@@ -193,7 +198,7 @@ lands before steps 1–6, the deploy fails.
    or on the box run `cd /srv/fotbal-fm-finances-planner && ./deploy.sh sha-<full sha>`.
 
 9. **[HUMAN]/[BOX] Verify.**
-   - `curl -fsS https://marketing.fotbal-fm.thedevs.cz/api/health` returns 200 with a valid Let's Encrypt cert.
+   - `curl -fsS https://marketing.fotbal-fm.cz/api/health` returns 200 with a valid Let's Encrypt cert.
    - `/login` with `APP_PASSWORD` works, and `/k/<APP_ACCESS_TOKEN>` lands on `/` with the token gone from the URL.
    - Two browsers see each other's changes live (SSE), and still do after a redeploy.
    - Uploading an attachment works (volume ownership).
@@ -233,7 +238,7 @@ otherwise the new container never becomes healthy and the rollout keeps the old 
 | Secret | Steps | Effect on users |
 |---|---|---|
 | `APP_PASSWORD` (team password) | Set the new value (min 8 chars) in Infisical (`prod`) → redeploy → tell the team. | **Logs everyone out**; sign in again with the new password or the (unchanged) magic link. |
-| `APP_ACCESS_TOKEN` (magic link) | `openssl rand -hex 24` → Infisical → redeploy → share the new `https://marketing.fotbal-fm.thedevs.cz/k/<token>`. | Old links stop working and **everyone is logged out**; sign in with the new link or the password. |
+| `APP_ACCESS_TOKEN` (magic link) | `openssl rand -hex 24` → Infisical → redeploy → share the new `https://marketing.fotbal-fm.cz/k/<token>`. | Old links stop working and **everyone is logged out**; sign in with the new link or the password. |
 | `SESSION_SECRET` | `openssl rand -hex 32` → Infisical → redeploy. | **Logs everyone out.** Use it to revoke all sessions without changing the password or the link. |
 | `POSTGRES_PASSWORD` | **[BOX]** Changing the env var alone does nothing, because the role password is set only when the DB is first initialised. Order: (1) `openssl rand -hex 32`; (2) `docker compose exec db psql -U planner -d planner -c "ALTER ROLE planner PASSWORD '<new>'"`, typed so it does not land in shell history; (3) update Infisical; (4) redeploy. The `db` container is re-created once (a 1–2 s blip) because its env changed. | None beyond the blip. |
 | `DEPLOY_WEBHOOK_SECRET` | **[BOX]** Replace the `FOTBAL_FM_FINANCES_PLANNER_DEPLOY_WEBHOOK_SECRET` line in `/srv/webhook/secrets.env` (back up first) → run `/srv/webhook/deploy.sh` (re-renders `hooks.yaml`; the receiver hot-reloads) → pipe the new value into `gh secret set DEPLOY_WEBHOOK_SECRET` exactly as in onboarding step 2. | Deploys fail until both sides match. |
@@ -273,6 +278,6 @@ configuring per app.
 | Deploy log: pull `401` / `denied` | The GHCR package is private (step 8). |
 | Deploy log: migration failed | The old version is still serving. Fix the migration and push again. |
 | Rollout reverted / container `unhealthy` | `/api/health` not answering on `127.0.0.1:3000` (check `HOSTNAME=0.0.0.0`, DB reachability, `wget` in the image). Logs: Loki `{app="fotbal-fm-finances-planner"}`. |
-| The browser reaches an old/unknown server, or gets a cert error | The DNS record is missing or proxied (step 4). Check with `dig +short marketing.fotbal-fm.thedevs.cz`; it should resolve to `lily.srv.thedevs.cz` / `91.98.188.211`. |
+| The browser reaches an old/unknown server, or gets a cert error | The DNS record is missing or proxied (step 4). Check with `dig +short marketing.fotbal-fm.cz`; it should resolve to `lily.srv.thedevs.cz` / `91.98.188.211`. |
 | Uploads fail with `EACCES` | `/data/uploads` in the image is not owned by uid 1001, so the volume was initialised root-owned. Fix the Dockerfile; for an existing volume, run `chown -R 1001:1001` on it once from a throwaway container. |
 | Many 403s / captcha for one client | CrowdSec `http-probing`. A client stuck in a tight 401 reconnect loop (SSE) can trip it, so the client must back off on 401/403. |

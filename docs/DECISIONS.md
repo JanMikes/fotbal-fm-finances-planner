@@ -5,7 +5,8 @@ Single source of truth for all implementation agents. Inputs: `prompt.md` (spec,
 `docs/analysis/infra.md` (lily hosting conventions).
 
 ## Product decisions (from the owner)
-- **Domain:** `marketing.fotbal-fm.thedevs.cz` (Cloudflare zone `thedevs.cz`; owner adds the CNAME).
+- **Domain:** `marketing.fotbal-fm.cz` (Webglobe DNS, CNAME → `fotbal-fm.cz` → lily; TLS via Let's Encrypt HTTP-01).
+  The original `marketing.fotbal-fm.thedevs.cz` (Cloudflare) permanently redirects to it, path + query preserved.
 - **Access:** no user accounts. Two ways in, both set the same long-lived (1 year) signed httpOnly cookie:
   1. **Magic link** `https://<domain>/k/<APP_ACCESS_TOKEN>` → sets cookie, redirects to `/` (token stripped from URL).
   2. **Password page** `/login` with one shared team password `APP_PASSWORD`.
