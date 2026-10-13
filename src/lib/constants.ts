@@ -57,7 +57,7 @@ export const UNIT_NAME_SUGGESTIONS: readonly string[] = [
 ];
 
 /** Automatic avatar fallback colours (prototype `AVC`). */
-export const AVC: readonly string[] = ["#0099cf", "#00588e", "#1b2341", "#007fb4", "#093f6b", "#4fbde4", "#63666b", "#12304f"];
+export const AVC: readonly string[] = ["#0099cf", "#00588e", "#1b2341", "#0079ab", "#093f6b", "#4fbde4", "#63666b", "#12304f"];
 
 /** 11 picker swatches for profile + unit colour (prototype `AVPAL`). */
 export const AVPAL: readonly string[] = [
@@ -81,7 +81,7 @@ export const LIGHT: ReadonlySet<string> = new Set(["#c4c8ce", "#4fbde4", "#d98a0
 const COLOR_NAMES: Readonly<Record<string, string>> = {
   "#0099cf": "Modrá",
   "#4fbde4": "Světle modrá",
-  "#007fb4": "Středně modrá",
+  "#0079ab": "Středně modrá",
   "#00588e": "Ocelová",
   "#093f6b": "Tmavě modrá",
   "#12304f": "Noční modrá",

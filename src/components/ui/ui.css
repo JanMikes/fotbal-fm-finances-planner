@@ -23,6 +23,7 @@
 .btn.block{display:flex;width:100%}
 .btn:disabled,.btn[aria-disabled="true"]{opacity:.45;cursor:not-allowed}
 .btn:disabled:active,.btn[aria-disabled="true"]:active{transform:none}
+.btn.primary:hover{background:var(--c-blue-strong)}
 .btn.primary:disabled:hover{background:var(--fm-blue)}
 .btn.outline:disabled:hover{border-color:var(--grey-300)}
 .btn.danger:disabled:hover{background:transparent;border-color:var(--c-danger-line)}
@@ -40,7 +41,7 @@ fieldset.f>legend.lbl{padding:0;margin:0;float:left;width:100%}
 .f .req{color:var(--fm-blue)}
 .f-hint{margin:0;font-size:12px;line-height:1.4;color:var(--grey-600)}
 .f-err{margin:0;display:flex;align-items:flex-start;gap:6px;font-size:13px;font-weight:600;line-height:1.35;color:var(--c-danger-ink)}
-.f-err::before{content:"!";flex:none;width:16px;height:16px;margin-top:1px;border-radius:50%;background:var(--c-danger-ink);color:#fff;font-size:11px;font-weight:800;line-height:16px;text-align:center}
+.f-err::before{content:"!" / "";flex:none;width:16px;height:16px;margin-top:1px;border-radius:50%;background:var(--c-danger-ink);color:#fff;font-size:11px;font-weight:800;line-height:16px;text-align:center}
 
 /* =================== Shared control look =================== */
 .fm-select,.fm-date .fm-date__input,.fm-month .fm-date__input,.fm-money .fm-money__input{

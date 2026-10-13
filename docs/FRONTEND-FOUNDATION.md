@@ -16,7 +16,7 @@ change an API contract, update `docs/API.md` and the integration tests.
 ## Styling
 
 - Global CSS = `src/styles/globals.css` → design tokens (`src/styles/fm/tokens/*`) + **prototype CSS verbatim,
-  frozen** (`src/styles/fm/prototype-app.css`) + `src/styles/app-extra.css` (login page, `.app-msg`) +
+  frozen** (`src/styles/fm/prototype-app.css`) + `src/styles/app-extra.css` (login page) +
   `src/styles/app-ux.css` (UX-round tokens and global overrides, last). Primitive styles: `src/components/ui/ui.css`
   (imported in `layout.tsx` after `components.css`). See „UI primitives" below. Use the prototype class names exactly (`.top`, `.tabs`, `.bar`, `.board`, `.col`, `.card`, `.ov`,
   `.modal`, `.onode`, `.tree`, `.curbud`, `.yv`, …). No Tailwind / UI libraries.
@@ -45,7 +45,7 @@ change an API contract, update `docs/API.md` and the integration tests.
 | `src/lib/store/optimistic.ts` | Pure optimistic transitions mirroring the server rules (move, duplicate, delete column/type/node, close year …). |
 | `src/lib/store/actions.ts` | `createActions(store)` — the mutations the UI calls. |
 | `src/lib/store/realtime.ts` | SSE client with reconnect/backoff + auth probe; every `hello` (incl. the first) and `resync` triggers a full refetch. |
-| `src/lib/store/react.tsx` | `StoreProvider`, `StoreGate`, `useAppState`, `useStoreSnapshot`, `useActions`, `usePrefs`, `useStore`. |
+| `src/lib/store/react.tsx` | `StoreProvider`, `StoreGate` (required `loading` node + `error(message)` renderer — the shell passes the skeleton and the retry card), `useAppState`, `useStoreSnapshot`, `useActions`, `usePrefs`, `useStore`. |
 
 ## Using the store
 
@@ -76,9 +76,16 @@ Rules of the store:
   need the result (e.g. open the duplicated task) and `catch` to keep the modal open.
 - After mutations settle, the store refetches `/api/state` to reconcile. Realtime events from other tabs/users
   trigger a debounced refetch, deferred while local mutations are pending; a response whose request started before
-  the latest mutation is discarded (and fetched again). Failed loads are retried with backoff (1 s → 30 s) and on
+  the latest mutation is discarded (and fetched again). A refetch requested while a load is in flight never aborts
+  it (a slow first load would starve under steady realtime traffic); it runs once more right after it (a load older
+  than 10 s is replaced). Failed loads are retried with backoff (1 s → 30 s) and on
   the `online` event; while they fail `snapshot.stale` is true (the „Offline" pill shows) — background failures are
   not toasted. You never need to patch state manually.
+- **Request ordering:** a create registers its id while in flight; any later action that targets or references that
+  id (rename / move / delete / update, a task in a just-created column, an upload to a just-created task, …) keeps
+  its optimistic change but sends its request only after the create has settled (`mutate(…, {creates, after})`),
+  so a quick rename after „Přidat sloupec" can't 404. If the create fails, the dependent request still runs and
+  reports its own error. New actions must pass these deps too.
 - **IDs are generated client-side** (`uuid()`), so a new entity has its final id immediately. Duplicate actions
   return the server payload; e.g. `const { task } = await actions.duplicateTask(id, prefs.me)` → open `task.id`.
 - `duplicateNode` for a **unit** has no optimistic step (recursive copy is server-side); it resolves with
@@ -139,7 +146,7 @@ server-side too (`https://` prefix), but use `normalizeUrl` for the immediate UI
 | `src/components/StatusLayer.tsx` | Error toast for `snapshot.error` (6 s), subtle „Offline" pill after 4 s without SSE or while refetches fail, silent refetch on `visibilitychange`. |
 | `src/components/ui/Modal.tsx` | Prototype modal shell (`.ov > .modal > .mh + body + .mf`), see „UI primitives". Render it from `ModalHost` (inside `#modalRoot`), or pass `portal` to portal it there (team forms). |
 | `src/components/ui/useCloseWhenDeleted.ts` | Edit modals (task, print item, member, unit): when the entity is deleted elsewhere, close with the toast „Položka byla smazána jiným uživatelem." |
-| `src/components/ui/Avatar.tsx` | `.av` circle (`lead` ring, „–" when unassigned, tooltip „Vedoucí/Zodpovědný: …", `role="img"` named by the tooltip, navy initials on `LIGHT` colours). |
+| `src/components/ui/Avatar.tsx` | `.av` circle (`lead` ring, „–" when unassigned, tooltip „Vedoucí/Zodpovědný: …", `role="img"` named by the tooltip, navy initials on `LIGHT` colours). `label="…"` overrides name + tooltip; `label={false}` = decorative (`aria-hidden`, e.g. org cards next to the name). |
 | `src/components/components.css` | Non-prototype CSS for the shell (report host, toast, offline pill); imported in `layout.tsx`. |
 | `src/features/board/Board.tsx` | Generic kanban (`mode: "tasks" \| "print"`, `visible` map, `renderCard`, `columnExtra`, optional `columnEditing`). Prototype DOM/classes. |
 | `src/features/board/useBoardDnd.ts` | Pointer-event drag & drop (prototype §7.7): mouse > 5 px, touch hold 220 ms + `vibrate(15)`, live placeholder `.ph` (a separate element — the original card stays mounted, hidden with `data-dragsrc`, so a touch drag survives crossing columns), ghost portal `body > .card.ghost`, `.col.over`, autoscroll (`body.dragging` disables the mobile scroll-snap), `pointercancel` reverts, `onDrop(id, columnId, beforeIdOfNextVisible)`, click swallowed 50 ms after a drag. |
@@ -173,12 +180,18 @@ use `data-sub` / `data-info` / `data-close` / `data-id` / `.onode` (React events
 
 CSS tokens (`app-ux.css`): `--c-ok`, `--c-ok-bg`, `--c-danger`, `--c-danger-ink` (#b3261e), `--c-danger-bg`,
 `--c-danger-line`, `--c-warn`, `--c-warn-bg`, `--c-warn-ink`, `--control-h` (44px), `--control-h-compact` (40px),
-`--control-fs` (15px), `--z-modal` 200, `--z-toast` 300, `--z-layer` 400, `--focus-ring-danger`, `--focus-ring-dark`;
-utility `.sr-only`. Global pass: `:focus-visible` ring (light on navy surfaces), field focus = blue border +
+`--control-fs` (15px), `--z-modal` 200, `--z-toast` 300, `--z-layer` 400, `--focus-ring-danger`, `--focus-ring-dark`,
+`--c-blue-strong` (#0079ab: `.btn.primary:hover` and the AVC fallback blue, white text 4.86:1 — DS `--blue-500` is
+4.47:1); `--c-ok` is #1a7a42 (white text / text on white 5.4:1; the prototype's #1f8a4c is 4.38:1 and is overridden
+where it is text). Decorative CSS glyphs (✓ marks, the `.f-err` „!") use alt text `content:"✓" / ""` so they stay
+out of accessible names. Utility `.sr-only`. Global pass: `:focus-visible` ring (light on navy surfaces), field focus = blue border +
 `--focus-ring`, `.budc`/`.avpick`/`.chkgrid` inputs visually hidden but focusable (ring via `:has(:focus-visible)`,
 checked = tint/fill + ✓), grey-600 minimum for small text, 11px minimum labels, `(pointer: coarse)` 44px minimums,
 `prefers-reduced-motion`. axe in e2e: `expectNoA11yViolations(page, {include, exclude, disableRules})` waits for
-animations and allowlists only the white-on-`--fm-blue` brand trade-off.
+animations and allowlists only the white-on-`--fm-blue` brand trade-off. `tests/e2e/a11y.spec.ts` is the overview:
+whole-page scans of login, Úkoly (board, open Select, task modal new/existing, calendar), Tiskoviny (board, item
+modal, Typy médií, yearly report) and Struktura týmu (org chart, member form new/existing, unit form) at
+1440×900 and 390×844 touch; feature specs keep scoped scans of special states.
 
 ## Known gaps / TODO for Phase 2
 

@@ -622,7 +622,6 @@ test.describe("Struktura týmu", () => {
     const modal = page.getByTestId("member-modal");
     await modal.getByRole("button", { name: "Přidat člena" }).click();
     await expect(modal.locator("#mName-err")).toBeVisible();
-    await page.mouse.move(1, 1); // resting state (the hovered primary button is the documented brand-blue case)
     await expectNoA11yViolations(page, { include: "[data-testid=member-modal]" });
     await page.locator("#mBoss").click();
     await expect(page.locator("#mBoss-listbox")).toBeVisible();

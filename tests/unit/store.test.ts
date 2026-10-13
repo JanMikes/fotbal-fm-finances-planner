@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
-import { ApiError } from "@/lib/api";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { api, ApiError } from "@/lib/api";
+import { createActions } from "@/lib/store/actions";
 import { AppStore } from "@/lib/store/store";
-import { addTask } from "@/lib/store/optimistic";
+import { addColumn, addTask, renameColumn } from "@/lib/store/optimistic";
 import { state, task } from "./fixtures";
 
 const flush = () => new Promise((r) => setTimeout(r, 120));
@@ -144,5 +145,123 @@ describe("AppStore", () => {
     await new Promise((r) => setTimeout(r, 80));
     expect(s.getSnapshot().stale).toBe(false);
     expect(s.getSnapshot().state?.tasks.map((t) => t.id)).toEqual(["new"]);
+  });
+});
+
+describe("AppStore — refetches during a slow load", () => {
+  it("realtime refetches do not abort a slow first load; one follow-up load runs after it", async () => {
+    let calls = 0;
+    const aborted: number[] = [];
+    const fetchState = vi.fn(
+      (signal?: AbortSignal) =>
+        new Promise<ReturnType<typeof state>>((resolve, reject) => {
+          const n = ++calls;
+          signal?.addEventListener("abort", () => (aborted.push(n), reject(Object.assign(new Error("aborted"), { name: "AbortError" }))));
+          setTimeout(() => resolve(state({ tasks: [task({ id: `t${n}` })] })), 60);
+        }),
+    );
+    const s = new AppStore(fetchState);
+    const first = s.load();
+    for (let i = 0; i < 5; i++) {
+      await new Promise((r) => setTimeout(r, 10));
+      void s.load(); // e.g. SSE events from other users every few ms
+    }
+    await first;
+    expect(aborted).toEqual([]);
+    expect(s.getSnapshot().status).toBe("ready");
+    expect(s.getSnapshot().state?.tasks.map((t) => t.id)).toEqual(["t1"]);
+    await new Promise((r) => setTimeout(r, 120));
+    expect(calls).toBe(2); // the five requests collapsed into one follow-up
+    expect(s.getSnapshot().state?.tasks.map((t) => t.id)).toEqual(["t2"]);
+  });
+});
+
+describe("AppStore — requests never overtake the create they depend on", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  /** A request whose resolution the test controls. */
+  function deferred<T = void>() {
+    let resolve!: (v: T) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => ((resolve = res), (reject = rej)));
+    return { promise, resolve, reject };
+  }
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+
+  it("holds a rename until the optimistic create of the same column has settled (optimistic state is immediate)", async () => {
+    const s = new AppStore(async () => state());
+    s.hydrate(state());
+    const sent: string[] = [];
+    const create = deferred();
+    const pc = s.mutate(
+      (st) => addColumn(st, { id: "c9", boardId: "tasks", title: "Nový" }),
+      () => (sent.push("create"), create.promise),
+      { creates: ["c9"] },
+    );
+    const pr = s.mutate(
+      (st) => renameColumn(st, "c9", "Přejmenovaný"),
+      async () => void sent.push("rename"),
+      { after: ["c9"] },
+    );
+    expect(s.getSnapshot().state?.columns.find((c) => c.id === "c9")?.title).toBe("Přejmenovaný");
+    await tick();
+    expect(sent).toEqual(["create"]); // the rename waits
+    create.resolve();
+    await Promise.all([pc, pr]);
+    expect(sent).toEqual(["create", "rename"]);
+    expect(s.getSnapshot().pending).toBe(0);
+  });
+
+  it("a failed create still releases the dependent request, which reports its own error", async () => {
+    const s = new AppStore(async () => state());
+    s.hydrate(state());
+    const create = deferred();
+    const pc = s.mutate((st) => addColumn(st, { id: "c9", boardId: "tasks", title: "Nový" }), () => create.promise, { creates: ["c9"] });
+    const rename = vi.fn(async () => {
+      throw new ApiError(404, "not_found", "Sloupec nenalezen.");
+    });
+    const pr = s.mutate((st) => renameColumn(st, "c9", "X"), rename, { after: ["c9"] });
+    create.reject(new ApiError(400, "validation", "Neplatná data."));
+    await expect(pc).rejects.toThrow();
+    await expect(pr).rejects.toThrow();
+    expect(rename).toHaveBeenCalledTimes(1);
+    expect(s.getSnapshot().state?.columns.some((c) => c.id === "c9")).toBe(false);
+    expect(s.getSnapshot().pending).toBe(0);
+  });
+
+  it("does not delay requests for other or already-created entities", async () => {
+    const s = new AppStore(async () => state());
+    s.hydrate(state());
+    const create = deferred();
+    void s.mutate(null, () => create.promise, { creates: ["c9"] });
+    const other = vi.fn(async () => undefined);
+    void s.mutate(null, other, { after: ["c1", null, undefined] });
+    expect(other).toHaveBeenCalledTimes(1); // sent synchronously, as before
+    create.resolve();
+    await tick();
+    const later = vi.fn(async () => undefined);
+    void s.mutate(null, later, { after: ["c9"] }); // create settled → no wait
+    expect(later).toHaveBeenCalledTimes(1);
+  });
+
+  it("actions: renameColumn right after createColumn reaches the API after the create", async () => {
+    const s = new AppStore(async () => state());
+    s.hydrate(state());
+    const order: string[] = [];
+    const create = deferred<never>();
+    vi.spyOn(api, "createColumn").mockImplementation(() => (order.push("create"), create.promise));
+    vi.spyOn(api, "renameColumn").mockImplementation(async (id, title) => {
+      order.push("rename");
+      return { id, boardId: "tasks", title, sortOrder: 0 };
+    });
+    const a = createActions(s);
+    const pc = a.createColumn("Nový");
+    const id = s.getSnapshot().state!.columns.find((c) => c.title === "Nový")!.id;
+    const pr = a.renameColumn(id, "Hotovo dnes");
+    await tick();
+    expect(order).toEqual(["create"]);
+    create.resolve({ id, boardId: "tasks", title: "Nový", sortOrder: 9 } as never);
+    await Promise.all([pc, pr]);
+    expect(order).toEqual(["create", "rename"]);
   });
 });

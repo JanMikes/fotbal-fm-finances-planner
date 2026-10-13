@@ -166,9 +166,7 @@ test("columns: add (prompt), rename inline, delete with confirm", async ({ page,
   await expect(page.locator("#board .col").last().locator(".t")).toHaveText(`${TAG} Sloupec`);
   await expect(page.locator("#board .col").last().locator(".empty-col")).toHaveText("Žádné úkoly");
 
-  // wait until the create reached the server (a rename racing the optimistic create would 404 — store limitation)
-  await expect.poll(async () => columnsOf(await getState(request), "tasks").some((c) => c.title === `${TAG} Sloupec`)).toBe(true);
-  // rename: click the title, type, Enter
+  // rename right away: the store holds the rename until the optimistic create has reached the server (no 404)
   const t = column(page, `${TAG} Sloupec`).locator(".t");
   await t.click();
   await page.keyboard.press("ControlOrMeta+A");
@@ -176,6 +174,7 @@ test("columns: add (prompt), rename inline, delete with confirm", async ({ page,
   await page.keyboard.press("Enter");
   await expect(column(page, `${TAG} Přejmenováno`)).toHaveCount(1);
   await expect.poll(async () => columnsOf(await getState(request), "tasks").some((c) => c.title === `${TAG} Přejmenováno`)).toBe(true);
+  await expect(page.locator(".app-toast")).toHaveCount(0);
 
   // empty rename restores the old title
   await column(page, `${TAG} Přejmenováno`).locator(".t").click();
@@ -404,7 +403,6 @@ test("a11y: board, filter popup, task modal (new / existing / validation), calen
   await page.locator("#btnNew").click();
   await modal.getByRole("button", { name: "Vytvořit úkol" }).click();
   await expect(modal.locator("#fTitle-err")).toBeVisible();
-  await page.mouse.move(1, 1); // measure the resting colours, not the hover state of „Vytvořit úkol"
   await expectNoA11yViolations(page, { include: ".modal" });
 });
 

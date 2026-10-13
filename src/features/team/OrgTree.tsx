@@ -82,9 +82,7 @@ function PersonCard({ n, root, ctx }: { n: OrgNode; root: boolean; ctx: Ctx }) {
     <div className={"onode" + (root ? " root" : "") + dragCls(n.id, ctx)} data-uid={n.id}>
       <div className="hd">
         {/* decorative here: the name is right next to it */}
-        <span className="onode-av" aria-hidden="true">
-          <Avatar nodes={ctx.nodes} id={n.id} />
-        </span>
+        <Avatar nodes={ctx.nodes} id={n.id} label={false} />
         <div>
           <button type="button" className="nm" title={n.name}>
             {n.name}

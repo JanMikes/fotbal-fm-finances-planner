@@ -37,7 +37,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             aria-describedby={message ? "loginErr" : undefined}
           />
           {message && (
-            <p className="login-err" id="loginErr" role="alert">
+            <p className="f-err login-err" id="loginErr" role="alert">
               {message}
             </p>
           )}

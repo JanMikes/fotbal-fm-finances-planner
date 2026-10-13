@@ -53,9 +53,6 @@
 .onode button.un{color:inherit}
 .onode button.nm:focus-visible,.onode button.un:focus-visible{outline:none}
 .onode:has(button.nm:focus-visible),.onode:has(button.un:focus-visible){outline:2px solid var(--fm-blue);outline-offset:3px}
-.onode-av{display:contents}
-/* AVC fallback #007fb4 carries white initials at 4.47:1 — a hair deeper on the cards until constants.ts changes it */
-.onode-av .av[style*="rgb(0, 127, 180)"]{background:#0079ab!important}
 .tree .onode .un{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* stats row: „3 úkoly · vede 1" */
@@ -113,8 +110,6 @@
 }
 
 /* =================== Member / unit forms =================== */
-/* the full-screen phone modal must not spread a short form over the whole height (grid rows stretch by default) */
-[data-testid="member-modal"]>.mb,[data-testid="unit-modal"]>.mb{align-content:start}
 .mb .tm-info{min-height:80px}
 .mb .budc{flex-wrap:wrap}
 .mb .budc label{flex:1 1 auto;padding:0 10px;white-space:nowrap}
