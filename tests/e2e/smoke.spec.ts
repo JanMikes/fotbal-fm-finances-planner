@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { createPerson, deleteNode } from "./boards-helpers";
 import { expectNoA11yViolations, expectValue, pick } from "./ui-helpers";
 
 const PASSWORD = process.env.APP_PASSWORD ?? "dev-password";
@@ -82,42 +83,51 @@ async function openShell(page: Page) {
 test.describe("shell", () => {
   test("header: tabs with aria-current, identity Select by keyboard (persisted), axe", async ({ page }) => {
     await openShell(page);
-    const tabs = page.locator("#tabs button");
-    await page.getByRole("button", { name: "Úkoly", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Úkoly", exact: true })).toHaveAttribute("aria-current", "page");
-    await expect(tabs.filter({ hasText: "Tiskoviny" })).not.toHaveAttribute("aria-current", /.*/);
-    await expect(page.locator("#btnNew")).toBeEnabled();
-    await expect(page.locator("#btnNew")).toHaveText("+ Nový úkol");
-
-    const me = page.getByRole("combobox", { name: "Přihlášen" });
-    await expect(me).toHaveAttribute("id", "me");
-    const before = await me.getAttribute("data-value");
-    expect(before).toBeTruthy();
-    // keyboard: Enter opens the list, End + Enter picks the last member
-    await me.focus();
-    await page.keyboard.press("Enter");
-    await expect(me).toHaveAttribute("aria-expanded", "true");
-    const lb = page.locator("#me-listbox");
-    await expect(lb).toBeVisible();
-    await expectNoA11yViolations(page, { include: [".top", "#me-listbox"] });
-    const opts = lb.getByRole("option");
-    expect(await opts.count()).toBeGreaterThan(1);
-    const last = (await opts.last().getAttribute("data-value"))!;
-    const lastName = (await opts.last().locator(".fm-select__label").textContent())!.trim();
-    await page.keyboard.press("End");
-    await page.keyboard.press("Enter");
-    await expect(me).toHaveAttribute("aria-expanded", "false");
-    await expectValue(me, last);
-    await expect(me).toContainText(lastName);
-    await expect(me).toBeFocused();
-    // the identity is remembered per browser
+    // self-contained: on a fresh database (CI) there may be fewer than two members at this point
+    const k = Date.now().toString(36);
+    const own = [await createPerson(page.request, `Hlavička A ${k}`), await createPerson(page.request, `Hlavička B ${k}`)];
     await page.reload();
-    await expectValue(page.locator("#me"), last);
-    // and the mouse path still works
-    await pick(page, "#me", before!);
-    await expectValue(page.locator("#me"), before!);
+    await expect(page.locator("#board .col, .org").first()).toBeVisible();
+    try {
+      const tabs = page.locator("#tabs button");
+      await page.getByRole("button", { name: "Úkoly", exact: true }).click();
+      await expect(page.getByRole("button", { name: "Úkoly", exact: true })).toHaveAttribute("aria-current", "page");
+      await expect(tabs.filter({ hasText: "Tiskoviny" })).not.toHaveAttribute("aria-current", /.*/);
+      await expect(page.locator("#btnNew")).toBeEnabled();
+      await expect(page.locator("#btnNew")).toHaveText("+ Nový úkol");
 
-    await expectNoA11yViolations(page, { include: ".top" });
+      const me = page.getByRole("combobox", { name: "Přihlášen" });
+      await expect(me).toHaveAttribute("id", "me");
+      const before = await me.getAttribute("data-value");
+      expect(before).toBeTruthy();
+      // keyboard: Enter opens the list, End + Enter picks the last member
+      await me.focus();
+      await page.keyboard.press("Enter");
+      await expect(me).toHaveAttribute("aria-expanded", "true");
+      const lb = page.locator("#me-listbox");
+      await expect(lb).toBeVisible();
+      await expectNoA11yViolations(page, { include: [".top", "#me-listbox"] });
+      const opts = lb.getByRole("option");
+      expect(await opts.count()).toBeGreaterThan(1);
+      const last = (await opts.last().getAttribute("data-value"))!;
+      const lastName = (await opts.last().locator(".fm-select__label").textContent())!.trim();
+      await page.keyboard.press("End");
+      await page.keyboard.press("Enter");
+      await expect(me).toHaveAttribute("aria-expanded", "false");
+      await expectValue(me, last);
+      await expect(me).toContainText(lastName);
+      await expect(me).toBeFocused();
+      // the identity is remembered per browser
+      await page.reload();
+      await expectValue(page.locator("#me"), last);
+      // and the mouse path still works
+      await pick(page, "#me", before!);
+      await expectValue(page.locator("#me"), before!);
+
+      await expectNoA11yViolations(page, { include: ".top" });
+    } finally {
+      for (const id of own) await deleteNode(page.request, id);
+    }
   });
 
   test("header height and tab labels at 1440 / 1024 / 390 px", async ({ page }) => {
