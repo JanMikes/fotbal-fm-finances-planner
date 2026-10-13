@@ -186,12 +186,11 @@ lands before steps 1–6, the deploy fails.
    starts Postgres, migrates and rolls out. Watch it in Grafana Loki (`{app="deploy"}`) or with
    `tail -f /var/log/lily/deploy.log` on the box.
 
-8. **[HUMAN] Make the GHCR package public.** Package visibility is separate from repo visibility,
-   and the sandboxed deploy executor cannot use root's docker login. After the first `ship` build:
-   GitHub → your profile → Packages → `fotbal-fm-finances-planner` → Package settings → Change
-   visibility → **Public**. If the first deploy already failed with a 401 on pull, re-run the
-   `Ship to lily` job of that CI run, or on the box run
-   `cd /srv/fotbal-fm-finances-planner && ./deploy.sh sha-<full sha>`.
+8. **[CHECK] GHCR package must be public.** For this repo (public) the package came out public
+   automatically on the first build (2026-10-13). Verify with an anonymous pull; if it is ever private,
+   GitHub → Packages → `fotbal-fm-finances-planner` → Package settings → Change visibility → **Public**
+   (the sandboxed deploy executor cannot use root's docker login), then re-run the `Ship to lily` job
+   or on the box run `cd /srv/fotbal-fm-finances-planner && ./deploy.sh sha-<full sha>`.
 
 9. **[HUMAN]/[BOX] Verify.**
    - `curl -fsS https://marketing.fotbal-fm.thedevs.cz/api/health` returns 200 with a valid Let's Encrypt cert.
