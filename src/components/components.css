@@ -1,13 +1,134 @@
-/* Shell / shared UI additions on top of the prototype CSS (not part of the prototype). */
+/* Shell / shared UI additions on top of the prototype CSS (not part of the prototype).
+   prototype-app.css is frozen: rules here override it with ≥ its specificity (import order is not guaranteed). */
 
 /* Yearly print report host: fixed below the main header (prototype §9.6 sets .yv top = header bottom).
    transform makes it the containing block for a position:fixed .yv inside, so `inset:0` fills the host. */
 .report-host{position:fixed;left:0;right:0;bottom:0;top:var(--fm-top-h,64px);z-index:150;transform:translateZ(0);overflow:auto;background:var(--grey-050)}
 @media print{.report-host{position:static;transform:none;overflow:visible;background:none}}
 
-/* Error toast (failed mutation, already rolled back by the store) */
-.app-toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:300;max-width:min(560px,calc(100vw - 32px));background:var(--fm-navy);color:#fff;border-left:4px solid #c62f28;border-radius:3px;padding:12px 16px;font-size:13px;font-weight:600;box-shadow:0 14px 32px rgba(27,35,65,.25);cursor:pointer}
+/* =================== Header (.top) =================== */
+/* ≥1181px: one row — brand · tabs · tools (prototype look, never wraps) */
+.top{flex-wrap:nowrap;column-gap:20px}
+.top .brand{min-width:0}
+.top .brand h1{white-space:nowrap}
+.top .brand-short,.top .tabs .tab-short{display:none}
+.top .tabs button{white-space:nowrap}
+.top .tools{flex-wrap:nowrap;flex:none}
+.who-box{display:flex;align-items:center;gap:8px;min-width:0}
+.who-l{font-size:12px;font-weight:600;color:var(--text-on-dark-muted);white-space:nowrap;cursor:pointer}
+.top .who-sel{min-width:200px;max-width:260px;padding-left:8px}
+.top .who-sel .fm-select__value{font-size:14px}
+.who-av{width:26px;height:26px;font-size:11px;box-shadow:0 0 0 2px rgba(255,255,255,.85)}
+.top #btnNew{gap:6px}
+#btnNew .bn-plus{font-size:15px;line-height:1}
 
-/* Realtime connection lost (subtle) */
-.app-offline{position:fixed;left:12px;bottom:12px;z-index:300;background:var(--grey-700);color:#fff;border-radius:3px;padding:4px 10px;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;opacity:.85;pointer-events:auto}
+/* 1181–1400px: still one row, slightly condensed */
+@media (min-width:1181px) and (max-width:1400px){
+  .top{padding:12px 24px;column-gap:16px}
+  .top .brand{gap:12px}
+  .top .brand img{height:36px}
+  .top .brand h1{font-size:18px}
+  .top .tabs button{padding:0 12px}
+  .who-l{display:none}
+  .top .who-sel{min-width:180px}
+}
+
+/* 761–1180px: two rows — brand + tools / tabs (no orphan rows) */
+@media (min-width:761px) and (max-width:1180px){
+  .top{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"brand tools" "tabs tabs";row-gap:10px;column-gap:20px;padding:10px 24px 0}
+  .top .brand{grid-area:brand}
+  .top .tools{grid-area:tools}
+  .top .tabs{grid-area:tabs;margin:0 -24px;padding:0 12px;border-top:1px solid var(--border-on-dark);align-self:auto}
+  .top .tabs button{padding:0 18px}
+}
+@media (min-width:761px) and (max-width:980px){
+  .top .brand h1{font-size:18px}
+  .top .brand img{height:34px}
+  .who-l{display:none}
+  .top .who-sel{min-width:180px}
+}
+
+/* ≤760px: compact brand row (logo, short title, avatar select, „+") + full-width tabs, ≤ 104px total */
+@media (max-width:760px){
+  .top{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-areas:"brand tools" "tabs tabs";row-gap:6px;column-gap:12px;padding:6px 14px 0;padding-top:max(6px,env(safe-area-inset-top))}
+  .top .brand{grid-area:brand;gap:10px;margin:0}
+  .top .brand img{height:30px}
+  .top .brand h1{font-size:16px;margin:2px 0 0}
+  .top .brand-long{position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
+  .top .brand-short{display:inline}
+  .top .tools{grid-area:tools;width:auto;min-width:0;justify-content:flex-end;gap:8px}
+  .who-box{flex:0 1 auto}
+  .who-l{display:none}
+  .top .who-sel{min-width:0;max-width:100%;padding:0 10px 0 6px;gap:8px}
+  .who-av{width:28px;height:28px}
+  .top .tabs{grid-area:tabs;order:0;width:auto;margin:0 -14px;padding:0 6px;border-top:1px solid var(--border-on-dark)}
+  .top .tabs button{flex:1;padding:0 8px;letter-spacing:.06em}
+  .top .tabs .tab-long{position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
+  .top .tabs .tab-short{display:inline}
+  #btnNew{width:40px;min-width:40px;padding:0;flex:none}
+  #btnNew .bn-plus{font-size:24px;font-weight:600}
+  #btnNew .bn-text{position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
+}
+@media (max-width:760px) and (pointer:coarse){
+  #btnNew{width:44px;min-width:44px}
+  .top .who-sel{min-height:44px}
+}
+@media (max-width:360px){.top .brand-short{display:none}}
+
+/* =================== First load: skeleton & error card =================== */
+@keyframes app-skel-pulse{0%,100%{opacity:1}50%{opacity:.55}}
+.app-skel{display:flex;flex-direction:column;min-height:calc(100vh - var(--fm-top-h,64px))}
+.app-skel i{display:block;background:var(--grey-200);border-radius:var(--radius-sm);animation:app-skel-pulse 1.4s ease-in-out infinite}
+.app-skel__bar{display:flex;gap:10px;align-items:center;padding:12px 26px;background:#fff;border-bottom:1px solid var(--grey-200)}
+.app-skel__ctl{width:200px;height:40px}
+.app-skel__ctl--search{width:320px;background:var(--grey-100)!important}
+.app-skel__bar .app-skel__ctl{height:40px}
+.app-skel__board{display:flex;gap:16px;padding:20px;overflow:hidden}
+.app-skel__col{flex:1 0 248px;max-width:320px;display:flex;flex-direction:column;gap:10px;padding:14px 12px;background:var(--grey-100);border-radius:var(--radius-md);min-height:420px}
+.app-skel__col .app-skel__head{width:55%;height:14px;margin:4px 0 6px;background:var(--grey-300)}
+.app-skel__col .app-skel__card{height:96px;background:#fff;border:1px solid var(--grey-200);border-radius:var(--radius-md)}
+.app-skel__org{display:flex;flex-direction:column;align-items:center;gap:40px;padding:48px 20px}
+.app-skel__row{display:flex;gap:24px;flex-wrap:wrap;justify-content:center}
+.app-skel__node{width:220px;height:84px;background:#fff!important;border:1px solid var(--grey-200);border-radius:var(--radius-md)}
+.app-skel__node--root{background:var(--grey-300)!important;border-color:var(--grey-300)}
+@media (max-width:760px){
+  .app-skel__bar{padding:10px 14px}
+  .app-skel .app-skel__ctl{flex:none;width:96px}.app-skel .app-skel__ctl--search{flex:1;width:auto}.app-skel .app-skel__ctl--2{display:none}
+  .app-skel__board{padding:12px 14px;gap:10px}
+  .app-skel__col{flex:0 0 86vw}
+}
+
+.app-err{display:flex;align-items:center;justify-content:center;padding:48px 16px;min-height:calc(100vh - var(--fm-top-h,64px));min-height:calc(100dvh - var(--fm-top-h,64px))}
+.app-err__card{width:100%;max-width:440px;display:flex;flex-direction:column;align-items:center;gap:12px;padding:32px 28px;background:#fff;border:1px solid var(--grey-200);border-radius:var(--radius-md);box-shadow:var(--shadow-card);text-align:center}
+.app-err__ic{position:relative;width:48px;height:48px;border-radius:50%;background:var(--c-danger-bg)}
+.app-err__ic::before{content:"!";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:900;color:var(--c-danger-ink)}
+.app-err__t{margin:4px 0 0;font-size:18px;font-weight:900;letter-spacing:-.01em;text-transform:uppercase;color:var(--fm-navy)}
+.app-err__msg{margin:0;font-size:14px;font-weight:600;color:var(--grey-800)}
+.app-err__hint{margin:0 0 6px;font-size:13px;line-height:1.45;color:var(--grey-600)}
+.app-err__card .btn{min-width:180px}
+
+/* =================== Error toast (failed mutation, already rolled back by the store) =================== */
+.app-toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:300;display:flex;align-items:center;gap:12px;width:max-content;max-width:min(560px,calc(100vw - 32px));background:var(--fm-navy);color:#fff;border-left:4px solid var(--c-danger);border-radius:var(--radius-sm);padding:8px 6px 8px 14px;font-size:14px;font-weight:600;line-height:1.4;box-shadow:0 14px 32px rgba(27,35,65,.25);animation:fm-fade .12s ease-out}
+.app-toast::before{content:"!" / "";flex:none;width:22px;height:22px;border-radius:50%;background:var(--c-danger);color:#fff;font-size:13px;font-weight:900;line-height:22px;text-align:center}
+.app-toast__msg{flex:1 1 auto;min-width:0;padding:4px 0}
+.app-toast__x{position:relative;flex:none;width:36px;height:36px;padding:0;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--text-on-dark-muted);cursor:pointer}
+.app-toast__x::before,.app-toast__x::after{content:"";position:absolute;left:50%;top:50%;width:14px;height:2px;border-radius:1px;background:currentColor;transform:translate(-50%,-50%) rotate(45deg)}
+.app-toast__x::after{transform:translate(-50%,-50%) rotate(-45deg)}
+.app-toast__x:hover{color:#fff;background:rgba(255,255,255,.1)}
+.app-toast__x:focus-visible{outline:2px solid var(--blue-200);outline-offset:0}
+@media (pointer:coarse){.app-toast__x{width:44px;height:44px}}
+/* a modal is open (desktop/tablet): keep its footer actions free */
+@media (min-width:761px){body:has(.ov) .app-toast{top:12px;bottom:auto}}
+@media (max-width:760px){
+  .app-toast{left:12px;right:12px;width:auto;max-width:none;transform:none;bottom:calc(12px + env(safe-area-inset-bottom))}
+  /* above the sticky modal footer (full-screen modal on mobile) */
+  body:has(.ov .mf) .app-toast{bottom:var(--toast-lift,calc(84px + env(safe-area-inset-bottom)))}
+}
+
+/* =================== Offline pill (realtime connection lost) =================== */
+.app-offline{position:fixed;left:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:300;display:flex;align-items:center;gap:8px;max-width:calc(100vw - 24px);background:var(--c-warn-bg);color:var(--c-warn-ink);border:1px solid var(--c-warn);border-radius:var(--radius-pill);padding:6px 14px 6px 10px;font-size:13px;font-weight:600;line-height:1.3;box-shadow:0 6px 18px rgba(27,35,65,.14)}
+.app-offline__dot{flex:none;width:10px;height:10px;border-radius:50%;background:var(--c-warn);box-shadow:0 0 0 3px rgba(217,138,0,.25)}
+.app-offline__t{font-weight:800;letter-spacing:.06em;text-transform:uppercase;font-size:12px}
+@media (max-width:760px){.app-offline{right:12px;border-radius:var(--radius-md)}}
 @media print{.app-toast,.app-offline{display:none!important}}
+@media (prefers-reduced-motion:reduce){.app-skel i{animation:none}}

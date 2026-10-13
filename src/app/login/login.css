@@ -1,0 +1,17 @@
+/* Login page — overrides the login rules in styles/app-extra.css (selectors one class stronger, import order is
+   not guaranteed). One focus style (blue border + ring) and one error style (red border, red ring on focus,
+   message with the shared „!" glyph). */
+.login .login-card{gap:20px;padding:32px 28px 28px;border-radius:var(--radius-md)}
+.login .login-brand{gap:14px}
+.login .login-brand img{height:48px}
+.login .login-brand h1{font-size:19px}
+.login .login-sub{margin:5px 0 0;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--grey-600)}
+.login .login-card .f{gap:6px}
+.login .login-card .f input{border-radius:var(--radius-sm);min-height:var(--control-h,44px);font-size:16px}
+.login .login-card .f input:focus,.login .login-card .f input:focus-visible{outline:0;border-color:var(--fm-blue);box-shadow:var(--focus-ring)}
+.login .login-card .f input[aria-invalid="true"]{border-color:var(--c-danger-ink)}
+.login .login-card .f input[aria-invalid="true"]:focus,.login .login-card .f input[aria-invalid="true"]:focus-visible{border-color:var(--c-danger-ink);box-shadow:var(--focus-ring-danger)}
+.login .login-card .login-err{display:flex;align-items:flex-start;gap:6px;margin:2px 0 0;font-size:13px;font-weight:600;line-height:1.35;color:var(--c-danger-ink)}
+.login .login-card .login-err::before{content:"!" / "";flex:none;width:16px;height:16px;margin-top:1px;border-radius:50%;background:var(--c-danger-ink);color:#fff;font-size:11px;font-weight:800;line-height:16px;text-align:center}
+.login .login-card .btn{min-height:44px}
+.login .login-card .btn:focus-visible{outline:2px solid var(--fm-blue);outline-offset:2px}

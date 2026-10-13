@@ -1,10 +1,11 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { expectNoA11yViolations, expectValue, optionText, optionTexts, pick } from "./ui-helpers";
 
 /**
  * Yearly print report („Roční přehled tiskovin"): KPIs, close / reopen year, print emulation.
  * Uses its own year (2019) so it does not interfere with other data; seeded and cleaned up through the API.
  * REPORT_E2E_PATH can point to a page that opens the report directly; otherwise the test opens it from the
- * Tiskoviny tab („Uzavřít rok").
+ * Tiskoviny tab („Roční přehled", #btnYear).
  */
 const PASSWORD = process.env.APP_PASSWORD ?? "dev-password";
 const YEAR = 2019;
@@ -48,7 +49,7 @@ async function openReport(page: Page) {
     await page.locator("#btnYear").click();
   }
   await expect(report).toBeVisible();
-  await page.locator("#yrSel").selectOption(String(YEAR));
+  await pick(page, "#yrSel", String(YEAR));
   await expect(page.locator(".yv-t")).toHaveText("Roční přehled tiskovin");
 }
 
@@ -84,7 +85,7 @@ test.describe.serial("yearly print report", () => {
     const kpis = page.locator(".yv-kpi .kp");
     await expect(kpis.nth(0)).toContainText("Celkem utraceno");
     await expect(kpis.nth(0).locator("b")).toHaveText("7 500 Kč");
-    await expect(kpis.nth(0).locator("i")).toHaveText("4 položek · 1 251 ks");
+    await expect(kpis.nth(0).locator("i")).toHaveText("4 položky · 1 251 ks");
     await expect(kpis.nth(1).locator("b")).toHaveText("4 500 Kč");
     await expect(kpis.nth(1).locator("i")).toHaveText("60 % z celku");
     await expect(kpis.nth(2).locator("b")).toHaveText("3 000 Kč");
@@ -106,6 +107,38 @@ test.describe.serial("yearly print report", () => {
     await expect(months.nth(0).locator(".yv-r")).toHaveCount(2);
     await expect(months.nth(0).locator(".yv-r .pr.ok")).toHaveText("4 500 Kč");
     await expect(page.locator("#yrClose")).toHaveText(`Uzavřít rok ${YEAR}`);
+
+    // chart: gridlines with round values; every month has a screen-reader summary (values are hidden on mobile)
+    await expect(page.locator(".cols .yv-gl").first()).toBeAttached();
+    await expect(page.locator(".cols .mc").nth(2).locator(".sr-only")).toHaveText(
+      "Březen: 5\u00a0500\u00a0Kč (zaplatil FK FM 4\u00a0500\u00a0Kč · dluží FK FM 1\u00a0000\u00a0Kč)",
+    );
+    await expectNoA11yViolations(page, { include: "#yv" });
+  });
+
+  test("year Select: keyboard, Escape closes only the list, a second Escape the report", async ({ page }) => {
+    await openReport(page);
+    const sel = page.locator("#yrSel");
+    await expectValue(sel, String(YEAR));
+    await expect(sel).toHaveAccessibleName("Rok");
+    expect(await optionTexts(page, "#yrSel")).toContain(String(YEAR));
+    const current = String(new Date().getFullYear());
+    // keyboard: open, Home (the newest year — years are DESC), Enter
+    await sel.focus();
+    await page.keyboard.press("Enter");
+    await expect(sel).toHaveAttribute("aria-expanded", "true");
+    await page.keyboard.press("Home");
+    await page.keyboard.press("Enter");
+    await expectValue(sel, current);
+    await expect(sel).toBeFocused();
+    // Escape contract: the open list swallows the first Escape
+    await page.keyboard.press("ArrowDown");
+    await expect(sel).toHaveAttribute("aria-expanded", "true");
+    await page.keyboard.press("Escape");
+    await expect(sel).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator("#yv")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#yv")).toHaveCount(0);
   });
 
   test("closing archives the year's items, reopening reverts it", async ({ page }) => {
@@ -116,8 +149,10 @@ test.describe.serial("yearly print report", () => {
       void d.accept();
     });
     await page.locator("#yrClose").click();
-    expect(dialogText).toBe(`Uzavřít rok ${YEAR}? 4 položek za 7\u00a0500\u00a0Kč se přesune do archivu.`); // amounts use non-breaking spaces
+    expect(dialogText).toBe(`Uzavřít rok ${YEAR}? 4 položky za 7\u00a0500\u00a0Kč se přesunou do archivu.`); // amounts use non-breaking spaces
     await expect(page.locator(".yv-st")).toContainText("Uzavřeno");
+    // the year list marks closed years
+    expect(await optionText(page, "#yrSel", String(YEAR))).toBe(`${YEAR} uzavřeno`);
     await expect(page.locator("#yrOpen")).toHaveText("Znovu otevřít");
     // the report still shows the (now archived) items
     await expect(page.locator(".yv-kpi .kp").first().locator("b")).toHaveText("7 500 Kč");
@@ -132,6 +167,10 @@ test.describe.serial("yearly print report", () => {
     await page.emulateMedia({ media: "print" });
     await expect(page.locator("#yrPrint")).toBeHidden();
     await expect(page.locator("#yrSel")).toBeHidden();
+    await expect(page.locator(".yv-more")).toBeHidden();
+    await expect(page.locator("#yvBack")).toBeHidden();
+    await expect(page.locator(".yv-yr-print")).toHaveText(String(YEAR)); // the year is printed next to the title
+    await expect(page.locator(".yv-yr-print")).toBeVisible();
     await expect(page.locator(".yv-st")).toBeVisible();
     await expect(page.locator(".top")).toBeHidden();
     await page.screenshot({ path: test.info().outputPath("report-print.png"), fullPage: true });
@@ -159,5 +198,52 @@ test.describe.serial("yearly print report", () => {
     await openReport(page);
     await page.keyboard.press("Escape");
     await expect(page.locator("#yv")).toHaveCount(0);
+  });
+
+  test("mobile: one-row bar (←, title, year, ⋯) and the „Další akce“ menu", async ({ page }) => {
+    await openReport(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const back = page.locator("#yvBack");
+    await expect(back).toHaveAccessibleName("Zpět na tiskoviny");
+    await expect(page.locator("#yrPrint")).toBeHidden();
+    await expect(page.locator("#yrClose")).toBeHidden();
+    const more = page.getByRole("button", { name: "Další akce" });
+    await expect(more).toBeVisible();
+    const mid = async (sel: string) => {
+      const b = (await page.locator(sel).boundingBox())!;
+      return b.y + b.height / 2;
+    };
+    const row = await mid("#yvBack");
+    for (const sel of [".yv-t", "#yrSel", ".yv-more"]) expect(Math.abs((await mid(sel)) - row)).toBeLessThan(4);
+    const bar = (await page.locator(".yv-bar").boundingBox())!;
+    expect(bar.height).toBeLessThanOrEqual(64);
+
+    await more.click();
+    await expect(more).toHaveAttribute("aria-expanded", "true");
+    const menu = page.getByRole("dialog", { name: "Další akce" });
+    await expect(menu.getByRole("button", { name: "Tisk / PDF" })).toBeVisible();
+    await expect(menu.getByRole("button", { name: `Uzavřít rok ${YEAR}` })).toBeEnabled();
+    await expect(menu.getByRole("button", { name: "Tisk / PDF" })).toBeFocused();
+    await expectNoA11yViolations(page, { include: ["#yv", "#yvMore"] });
+    // Escape closes only the menu
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+    await expect(more).toBeFocused();
+    await expect(page.locator("#yv")).toBeVisible();
+
+    // close the year from the menu (same confirm as the desktop button), then reopen it
+    page.once("dialog", (d) => void d.accept());
+    await more.click();
+    await menu.getByRole("button", { name: `Uzavřít rok ${YEAR}` }).click();
+    await expect(page.locator(".yv-st")).toContainText("Uzavřeno");
+    await more.click();
+    await menu.getByRole("button", { name: `Znovu otevřít rok ${YEAR}` }).click();
+    await expect(page.locator(".yv-st")).toHaveCount(0);
+    await expect
+      .poll(async () => {
+        const s = await seededItems(page.request);
+        return !s.closed && s.items.every((i) => !i.archived);
+      })
+      .toBe(true);
   });
 });

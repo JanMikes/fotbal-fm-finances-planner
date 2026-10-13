@@ -7,7 +7,81 @@
  * 4 KPI tiles in a row (smaller values so they fit), full-width chart with value labels, full-width type
  * breakdown and list rows with name · type · ks · price.
  */
+
+/* ---------- Bar (screen) ---------- */
+.yv .yv-bar .sub{flex-wrap:nowrap}
+.yv .yv-back__ic{font-size:16px;line-height:1}
+.yv .yv-back{gap:6px}
+.yv .yv-b:focus{outline:0}
+.yv .yv-b:focus-visible{outline:2px solid var(--fm-blue);outline-offset:-3px}
+.yv .yv-t{white-space:nowrap}
+.yv .yv-year{min-width:120px;width:auto}
+.yv .yv-yr-print{display:none}
+.yv .yv-st{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:var(--radius-pill);background:var(--c-ok-bg);color:var(--fm-navy);white-space:nowrap}
+.yv .yv-st::before{content:"";width:6px;height:10px;margin:-2px 2px 0 0;border-right:2px solid var(--c-ok);border-bottom:2px solid var(--c-ok);transform:rotate(45deg)}
+.yv .yv-more{display:none}
+.yv .yv-dots,.yv .yv-dots::before,.yv .yv-dots::after{display:block;width:4px;height:4px;border-radius:50%;background:currentColor}
+.yv .yv-dots{position:relative}
+.yv .yv-dots::before,.yv .yv-dots::after{content:"";position:absolute;top:0}
+.yv .yv-dots::before{left:-7px}.yv .yv-dots::after{left:7px}
+
+/* „⋯" menu (popover / sheet, portalled to body) */
+.yv-menu__list{display:flex;flex-direction:column;padding:6px 0;min-width:220px}
+.yv-menu__it{display:flex;align-items:center;gap:12px;min-height:44px;padding:0 16px;border:0;background:transparent;color:var(--fm-navy);font:inherit;font-size:15px;font-weight:600;text-align:left;cursor:pointer}
+.yv-menu__it:hover:not(:disabled){background:var(--blue-050)}
+.yv-menu__it:focus-visible{outline:2px solid var(--fm-blue);outline-offset:-2px}
+.yv-menu__it:disabled{color:var(--grey-500);cursor:not-allowed}
+.fm-sheet .yv-menu__it{min-height:52px;font-size:16px}
+.yv-menu__ic{position:relative;flex:none;width:18px;height:18px;color:var(--grey-600)}
+.yv-menu__ic--print::before{content:"";position:absolute;left:1px;right:1px;top:5px;height:8px;border:2px solid currentColor;border-radius:2px}
+.yv-menu__ic--print::after{content:"";position:absolute;left:5px;right:5px;top:1px;bottom:1px;border:2px solid currentColor;background:#fff;clip-path:polygon(0 0,100% 0,100% 30%,0 30%,0 70%,100% 70%,100% 100%,0 100%)}
+.yv-menu__ic--close::before{content:"";position:absolute;left:2px;right:2px;bottom:1px;height:10px;border:2px solid currentColor;border-radius:2px}
+.yv-menu__ic--close::after{content:"";position:absolute;left:5px;right:5px;top:1px;height:8px;border:2px solid currentColor;border-bottom:0;border-radius:5px 5px 0 0}
+.yv-menu__ic--open::before{content:"";position:absolute;left:2px;right:2px;bottom:1px;height:10px;border:2px solid currentColor;border-radius:2px}
+.yv-menu__ic--open::after{content:"";position:absolute;left:9px;width:7px;top:0;height:8px;border:2px solid currentColor;border-bottom:0;border-radius:5px 5px 0 0}
+
+/* ---------- Chart gridlines (screen + print) ---------- */
+.yv .cols{position:relative;padding-left:48px}
+.yv .yv-grid{position:absolute;left:0;right:0;top:20px;bottom:0;pointer-events:none}
+.yv .yv-gl{position:absolute;left:48px;right:0;height:0;border-top:1px dashed var(--grey-200)}
+.yv .yv-gl__l{position:absolute;right:calc(100% + 8px);top:0;transform:translateY(-50%);font-size:11px;font-weight:600;color:var(--grey-600);white-space:nowrap;font-variant-numeric:tabular-nums}
+.yv .mc{z-index:1}
+
+/* ---------- ≤760px: one-row bar (←, title, year, ⋯) ---------- */
+@media (max-width:760px){
+  .yv .yv-bar{padding:8px 0}
+  .yv .yv-bar .sub{gap:8px;flex-wrap:wrap}
+  .yv .yv-back{width:40px;min-width:40px;padding:0;flex:none}
+  .yv .yv-back__t,.yv .yv-t__x{position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
+  .yv .yv-back__ic{font-size:20px}
+  .yv .yv-t{flex:1 1 auto;min-width:0;margin:0;font-size:15px}
+  .yv .yv-year{min-width:96px;flex:none}
+  .yv .yv-act{display:none}
+  .yv .yv-more{display:inline-flex;flex:none}
+  .yv .yv-st{order:10;flex-basis:100%;justify-content:center}
+  .yv .yv-card{padding:16px 14px}
+  .yv .yv-chart{padding-bottom:34px}
+  .yv .cols{padding-left:0;gap:3px}
+  .yv .yv-gl{left:0}
+  .yv .yv-gl__l{right:auto;left:0;top:auto;bottom:2px;transform:none;font-size:10px;background:rgba(255,255,255,.85);padding:0 2px}
+  .yv .mc .l{font-size:10px;letter-spacing:-.01em}
+}
+@media (max-width:760px) and (pointer:coarse){
+  .yv .yv-back{width:44px;min-width:44px}
+  .yv .yv-year{min-height:44px}
+}
+
 @media print {
+  .yv .yv-bar .sub{flex-wrap:wrap}
+  .yv .yv-t__x{position:static;width:auto;height:auto;margin:0;overflow:visible;clip:auto;clip-path:none}
+  .yv .yv-yr-print{display:inline;font-size:18px;font-weight:900;color:var(--fm-navy)}
+  .yv .yv-bar .fm-select,.yv .yv-more{display:none!important}
+  .yv .yv-st{order:0;flex-basis:auto}
+  .yv .cols{padding-left:40px}
+  .yv .yv-gl{left:40px}
+  .yv .yv-gl__l{font-size:9px;left:auto;right:calc(100% + 6px);bottom:auto;top:0;transform:translateY(-50%);background:none;padding:0}
+  .yv .cols{gap:6px}
+
   @page { size: A4 portrait; margin: 12mm; }
   html, body { height: auto; background: #fff; }
   .yv { inset: auto; display: block; background: #fff; }
