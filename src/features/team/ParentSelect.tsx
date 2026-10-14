@@ -1,12 +1,6 @@
 "use client";
-/**
- * Nadřízený / Zařazení select (prototype `bossOpts`): the empty option first, then the groups „Kategorie" and
- * „Členové" (omitted when empty). The caller passes `parentOptions()`, which already excludes the edited node and
- * its descendants. Persons show their role as the right-hand meta and are searchable by it.
- */
-import { Select } from "@/components/ui";
+/** Nadřízený / Zařazení select (prototype `bossOpts`): empty option, then optgroups Kategorie and Členové (omitted when empty). */
 import type { OrgNode } from "@/lib/types";
-import { parentSelectOptions } from "./orgText";
 
 export function ParentSelect({
   id,
@@ -14,14 +8,34 @@ export function ParentSelect({
   onChange,
   emptyLabel,
   options,
-  "aria-describedby": describedBy,
 }: {
   id: string;
   value: string;
   onChange: (v: string) => void;
   emptyLabel: string;
   options: { units: OrgNode[]; persons: OrgNode[] };
-  "aria-describedby"?: string;
 }) {
-  return <Select id={id} value={value} onChange={onChange} options={parentSelectOptions(emptyLabel, options)} aria-describedby={describedBy} />;
+  return (
+    <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">{emptyLabel}</option>
+      {options.units.length > 0 && (
+        <optgroup label="Kategorie">
+          {options.units.map((n) => (
+            <option key={n.id} value={n.id}>
+              {n.name}
+            </option>
+          ))}
+        </optgroup>
+      )}
+      {options.persons.length > 0 && (
+        <optgroup label="Členové">
+          {options.persons.map((n) => (
+            <option key={n.id} value={n.id}>
+              {n.name}
+            </option>
+          ))}
+        </optgroup>
+      )}
+    </select>
+  );
 }

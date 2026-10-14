@@ -2,18 +2,15 @@
 /**
  * Org tree (prototype §10.4–10.7): nested `ul/li` with CSS connectors (`.tree`), person and unit cards.
  * Interaction is delegated to the `.org` container (TeamTab / useOrgDrag) via data attributes:
- * `data-uid`, `data-unit`, `data-sub` (+ button), `data-info` (i button). Each card's name is a real `<button>`
- * (keyboard: Tab + Enter/Space opens the form; the card shows the focus ring) — the card itself is not interactive,
- * so the „i" / „+" buttons are not nested inside another button.
+ * `data-uid`, `data-unit`, `data-sub` (+ button), `data-info` (i button).
  */
 import { memo } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { CATS } from "@/lib/constants";
 import { kcs } from "@/lib/format";
-import { buildTree, peopleCount, personStats, unitTaskCount, type TreeNode } from "@/lib/tree";
+import { buildTree, isLightColor, peopleCount, personStats, unitTaskCount, type TreeNode } from "@/lib/tree";
 import type { OrgNode, Task } from "@/lib/types";
 import type { DropPos } from "./dropZone";
-import { budgetFlagTitle, memberWord, personStatsTitle, taskWord, unitBackground, unitInk } from "./orgText";
 
 export interface TreeDragView {
   /** Node being dragged (rendered as the dashed placeholder `.ph`). */
@@ -27,13 +24,11 @@ interface Props extends TreeDragView {
   nodes: OrgNode[];
   tasks: Task[];
   lastColumnId: string | null;
-  /** Person whose info bubble is open (`aria-expanded` on its „i" button). */
-  infoId: string | null;
 }
 
-export const OrgTree = memo(function OrgTree({ nodes, tasks, lastColumnId, dragId, overId, overPos, infoId }: Props) {
+export const OrgTree = memo(function OrgTree({ nodes, tasks, lastColumnId, dragId, overId, overPos }: Props) {
   const tree = buildTree(nodes);
-  const ctx: Ctx = { nodes, tasks, lastColumnId, dragId, overId, overPos, infoId };
+  const ctx: Ctx = { nodes, tasks, lastColumnId, dragId, overId, overPos };
   return (
     <div className="tree" id="tree">
       <ul>
@@ -49,7 +44,6 @@ interface Ctx extends TreeDragView {
   nodes: OrgNode[];
   tasks: Task[];
   lastColumnId: string | null;
-  infoId: string | null;
 }
 
 function dragCls(id: string, ctx: Ctx): string {
@@ -77,16 +71,12 @@ function Branch({ t, root, ctx }: { t: TreeNode; root?: boolean; ctx: Ctx }) {
 function PersonCard({ n, root, ctx }: { n: OrgNode; root: boolean; ctx: Ctx }) {
   const { act, lead } = personStats(n.id, ctx.tasks, ctx.lastColumnId);
   const bud = n.budgetColor === "green" ? " green" : n.budgetColor === "red" ? " red" : "";
-  const infoOpen = ctx.infoId === n.id;
   return (
-    <div className={"onode" + (root ? " root" : "") + dragCls(n.id, ctx)} data-uid={n.id}>
+    <div className={"onode" + (root ? " root" : "") + dragCls(n.id, ctx)} data-uid={n.id} role="button" tabIndex={0}>
       <div className="hd">
-        {/* decorative here: the name is right next to it */}
-        <Avatar nodes={ctx.nodes} id={n.id} label={false} />
+        <Avatar nodes={ctx.nodes} id={n.id} />
         <div>
-          <button type="button" className="nm" title={n.name}>
-            {n.name}
-          </button>
+          <div className="nm">{n.name}</div>
           <div className="rl">{n.role || "Člen týmu"}</div>
         </div>
       </div>
@@ -97,33 +87,25 @@ function PersonCard({ n, root, ctx }: { n: OrgNode; root: boolean; ctx: Ctx }) {
           ))}
         </div>
       )}
-      <div className="st" title={personStatsTitle(act, lead)}>
-        <span className="st-i">
-          <b>{act}</b> {taskWord(act)}
+      <div className="st">
+        <span>
+          <b>{act}</b>řeší
         </span>
-        <span className="st-i">
-          vede <b>{lead}</b>
+        <span>
+          <b>{lead}</b>vede
         </span>
         {n.budget ? (
-          <span className={"bud" + bud} title={budgetFlagTitle(n.budget, n.budgetColor)}>
+          <span className={"bud" + bud} title="Budget">
             {kcs(n.budget)}
           </span>
         ) : null}
       </div>
       {n.info ? (
-        <button
-          type="button"
-          className="info has"
-          data-info={n.id}
-          title="Informace"
-          aria-label={`Informace – ${n.name}`}
-          aria-expanded={infoOpen}
-          aria-controls={infoOpen ? "infoPop" : undefined}
-        >
+        <button type="button" className="info has" data-info={n.id} title="Informace" aria-label="Informace">
           i
         </button>
       ) : null}
-      <button type="button" className="plus" data-sub={n.id} title="Přidat podřízeného" aria-label={`Přidat podřízeného – ${n.name}`}>
+      <button type="button" className="plus" data-sub={n.id} title="Přidat podřízeného" aria-label="Přidat podřízeného">
         +
       </button>
     </div>
@@ -133,26 +115,22 @@ function PersonCard({ n, root, ctx }: { n: OrgNode; root: boolean; ctx: Ctx }) {
 function UnitCard({ n, ctx }: { n: OrgNode; ctx: Ctx }) {
   const ppl = peopleCount(ctx.nodes, n.id);
   const tc = unitTaskCount(n.name, ctx.tasks, ctx.lastColumnId, CATS);
-  const bg = n.color ? unitBackground(n.color) : null;
-  const style = bg ? { background: bg, borderColor: bg } : undefined;
-  const ink = unitInk(n.color);
+  const style = n.color ? { background: n.color, borderColor: n.color } : undefined;
   return (
-    <div className={"onode unit" + (ink ? " " + ink : "") + dragCls(n.id, ctx)} data-uid={n.id} data-unit="1" style={style}>
+    <div className={"onode unit" + (isLightColor(n.color) ? " lt" : "") + dragCls(n.id, ctx)} data-uid={n.id} data-unit="1" role="button" tabIndex={0} style={style}>
       <span className="uk">Kategorie</span>
-      <button type="button" className="un" title={n.name}>
-        {n.name}
-      </button>
+      <span className="un">{n.name}</span>
       <div className="st">
-        <span className="st-i">
-          <b>{ppl}</b> {memberWord(ppl)}
+        <span>
+          <b>{ppl}</b>pod ní
         </span>
         {tc !== null && (
-          <span className="st-i" title="Rozpracované úkoly v této kategorii">
-            <b>{tc}</b> {taskWord(tc)}
+          <span>
+            <b>{tc}</b>úkolů
           </span>
         )}
       </div>
-      <button type="button" className="plus" data-sub={n.id} title="Přidat člena pod kategorii" aria-label={`Přidat člena do kategorie ${n.name}`}>
+      <button type="button" className="plus" data-sub={n.id} title="Přidat člena pod kategorii" aria-label="Přidat člena">
         +
       </button>
     </div>

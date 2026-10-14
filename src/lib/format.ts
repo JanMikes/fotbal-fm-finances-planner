@@ -1,8 +1,8 @@
 /** Formatting / parsing helpers ported from the prototype (prototype.md §5). Pure, locale cs-CZ. */
-import { formatMonth, NBSP, plural, toIsoDate } from "./dates";
+import { MNAMES } from "./constants";
 
-/** Non-breaking space (defined in `dates.ts`): thousands separator and number–unit gap, so „15 000 Kč" never wraps. */
-export { NBSP };
+/** Non-breaking space: thousands separator and number–unit gap, so „15 000 Kč" never wraps. */
+export const NBSP = "\u00a0";
 
 /** cs-CZ number with thousands separated by U+00A0 (ICU may emit U+00A0 or U+202F; both are normalised). */
 export function nf(n: number): string {
@@ -72,21 +72,35 @@ export function qtyLabel(q: number | null | undefined): string {
   return nf(q || 0) + NBSP + "ks";
 }
 
-/** Dates live in `dates.ts`; re-exported here so existing imports keep working. */
-export { formatDate, formatDayMonth, parseIsoDate, plural } from "./dates";
-
-/** `3 položky`, `1 položka`, `5 položek`, `1 500 položek` — number (nf) + the Czech plural form. */
-export function pluralize(n: number, one: string, few: string, many: string): string {
-  return nf(n) + " " + plural(n, one, few, many);
+/** Parse "YYYY-MM-DD" as a LOCAL date (midnight). */
+export function parseIsoDate(iso: string): Date {
+  return new Date(iso.length === 10 ? iso + "T00:00:00" : iso);
 }
+
+/** `13. 10. 2026` — accepts "YYYY-MM-DD", an ISO timestamp, a Date or epoch ms. */
+export function formatDate(d: string | number | Date): string {
+  const date = typeof d === "string" ? parseIsoDate(d) : new Date(d);
+  return date.toLocaleDateString("cs-CZ");
+}
+
+/** `13. 10.` */
+export function formatDayMonth(d: string | Date): string {
+  const date = typeof d === "string" ? parseIsoDate(d) : d;
+  return date.toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" });
+}
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
 
 /** "YYYY-MM" of a local date. */
 export function monthKey(d: Date): string {
-  return toIsoDate(d).slice(0, 7);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
 }
 
-/** `Říjen 2026` from "2026-10" (prototype `monLab`; one month table: `dates.ts` `formatMonth`). */
-export const monLab = formatMonth;
+/** `Říjen 2026` from "2026-10" (prototype `monLab`). */
+export function monLab(m: string): string {
+  const [y, mo] = m.split("-");
+  return MNAMES[Number(mo) - 1] + " " + y;
+}
 
 /** Link URL normalisation: trim, prepend https:// when there is no scheme (prototype `addLink`); `mailto:` is kept. */
 export function normalizeUrl(raw: string): string {

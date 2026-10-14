@@ -1,11 +1,12 @@
 "use client";
 /** Unit (category) form „Kategorie" / „Nová kategorie" (prototype §10.11). */
-import { useRef, useState } from "react";
-import { Button, Field, fieldA11y, Modal, useCloseWhenDeleted } from "@/components/ui";
-import { AVPAL, colorName, DEFAULT_UNIT_COLOR, UNIT_NAME_SUGGESTIONS } from "@/lib/constants";
+import { useEffect, useRef, useState } from "react";
+import { Modal } from "@/components/ui/Modal";
+import { useCloseWhenDeleted } from "@/components/ui/useCloseWhenDeleted";
+import { AVPAL, DEFAULT_UNIT_COLOR, UNIT_NAME_SUGGESTIONS } from "@/lib/constants";
 import { changedFields, isEmptyPatch } from "@/lib/patch";
 import { useActions, useAppState } from "@/lib/store/react";
-import { inkOn, parentOptions } from "@/lib/tree";
+import { parentOptions } from "@/lib/tree";
 import { ParentSelect } from "./ParentSelect";
 
 export function UnitForm({ id, parentId, onClose }: { id: string | null; parentId: string | null; onClose: () => void }) {
@@ -24,6 +25,13 @@ export function UnitForm({ id, parentId, onClose }: { id: string | null; parentI
   const [parent, setParent] = useState<string>(init.parent);
   const [nameErr, setNameErr] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (ex) return;
+    const t = setTimeout(() => nameRef.current?.focus(), 30);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const opts = parentOptions(state.nodes, ex?.id ?? null);
 
@@ -61,80 +69,69 @@ export function UnitForm({ id, parentId, onClose }: { id: string | null; parentI
     void actions.duplicateNode(ex.id).catch(() => {});
   };
 
-  const nameError = nameErr ? "Vyplňte název" : null;
-
   return (
     <Modal
       title={ex ? "Kategorie" : "Nová kategorie"}
       onClose={onClose}
       portal
       testId="unit-modal"
-      initialFocus={ex ? undefined : "#uName"}
-      onSubmit={save}
-      footStart={
-        ex ? (
-          <>
-            <Button variant="danger" id="uDel" className="mf-ic mf-ic--del" onClick={remove}>
-              Smazat
-            </Button>
-            <Button variant="outline" id="uDup" className="mf-ic mf-ic--dup" onClick={duplicate}>
-              Duplikovat
-            </Button>
-          </>
-        ) : undefined
-      }
       foot={
         <>
-          <Button variant="outline" onClick={onClose}>
+          <span className="meta">Pokud se název shoduje s kategorií úkolů, karta ukazuje počet rozpracovaných úkolů.</span>
+          {ex && (
+            <>
+              <button type="button" className="btn danger" id="uDel" onClick={remove}>
+                Smazat
+              </button>
+              <button type="button" className="btn outline" id="uDup" onClick={duplicate}>
+                Duplikovat
+              </button>
+            </>
+          )}
+          <button type="button" className="btn outline" onClick={onClose}>
             Zrušit
-          </Button>
-          <Button variant="primary" id="uOk" onClick={save}>
+          </button>
+          <button type="button" className="btn primary" id="uOk" onClick={save}>
             {ex ? "Uložit" : "Přidat kategorii"}
-          </Button>
+          </button>
         </>
       }
     >
       <div className="mb">
-        <Field
-          label="Název kategorie"
-          htmlFor="uName"
-          required
-          wide
-          error={nameError}
-          hint="Pokud se název shoduje s kategorií úkolů, karta ukazuje počet rozpracovaných úkolů."
-        >
+        <div className="f w">
+          <label htmlFor="uName">
+            Název kategorie <span className="req">*</span>
+          </label>
           <input
             id="uName"
             ref={nameRef}
             list="uSug"
             value={name}
             placeholder="Např. Sociální sítě, Mládež, Web…"
-            autoComplete="off"
-            onChange={(e) => {
-              setName(e.target.value);
-              if (nameErr && e.target.value.trim()) setNameErr(false);
-            }}
-            {...fieldA11y("uName", { hint: true, error: nameError, required: true })}
+            style={nameErr ? { borderColor: "#b3261e" } : undefined}
+            onChange={(e) => setName(e.target.value)}
           />
           <datalist id="uSug">
             {UNIT_NAME_SUGGESTIONS.map((s) => (
               <option key={s} value={s} />
             ))}
           </datalist>
-        </Field>
-        <Field label="Barva kategorie" group wide>
+        </div>
+        <div className="f w">
+          <span className="lbl">Barva kategorie</span>
           <div className="avpick">
             {AVPAL.map((c) => (
               <label key={c} title={c}>
-                <input type="radio" name="ucol" value={c} checked={color === c} onChange={() => setColor(c)} aria-label={colorName(c)} />
-                <i style={{ background: c, color: inkOn(c).ink }} />
+                <input type="radio" name="ucol" value={c} checked={color === c} onChange={() => setColor(c)} />
+                <i style={{ background: c }} />
               </label>
             ))}
           </div>
-        </Field>
-        <Field label="Zařazení ve struktuře (pod koho patří)" htmlFor="uBoss" wide>
+        </div>
+        <div className="f w">
+          <label htmlFor="uBoss">Zařazení ve struktuře (pod koho patří)</label>
           <ParentSelect id="uBoss" value={parent} onChange={setParent} emptyLabel="— nejvyšší úroveň —" options={opts} />
-        </Field>
+        </div>
       </div>
     </Modal>
   );

@@ -13,38 +13,26 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const { error } = await searchParams;
   const message = error ? (ERRORS[error] ?? ERRORS["1"]) : null;
   return (
-    <main className="login">
-      <form className="login-card" method="post" action="/api/auth/login" aria-labelledby="loginTitle">
+    <div className="login">
+      <form className="login-card" method="post" action="/api/auth/login">
         <div className="login-brand">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo-short.svg" alt="Fotbal FM" />
-          <div>
-            <h1 id="loginTitle">Marketingový plán úkolů</h1>
-            <p className="login-sub">FK Frýdek-Místek · marketing</p>
-          </div>
+          <h1>Marketingový plán úkolů</h1>
         </div>
         <div className="f">
           <label htmlFor="password">Heslo týmu</label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            required
-            autoFocus
-            aria-invalid={message ? true : undefined}
-            aria-describedby={message ? "loginErr" : undefined}
-          />
-          {message && (
-            <p className="f-err login-err" id="loginErr" role="alert">
-              {message}
-            </p>
-          )}
+          <input id="password" name="password" type="password" autoComplete="current-password" required autoFocus aria-invalid={!!message} />
         </div>
+        {message && (
+          <p className="login-err" role="alert">
+            {message}
+          </p>
+        )}
         <button className="btn primary" type="submit">
           Vstoupit
         </button>
       </form>
-    </main>
+    </div>
   );
 }

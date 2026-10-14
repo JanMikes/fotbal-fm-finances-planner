@@ -1,9 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import { dueInfo } from "../../src/lib/due";
 import { card, column, columnsOf, getState, mouseDrag, openApp } from "./boards-helpers";
-import { expectNoA11yViolations, expectValue, optionText, optionTexts, pick, setDate } from "./ui-helpers";
-
-const NB = "\u00a0";
 
 /**
  * Tiskoviny tab (prototype §9): item CRUD with price → column sum + „Celkem", paid/owed/none tags, fixed columns,
@@ -67,32 +63,23 @@ test("create item with price → column sum and „Celkem“; paid / owed / none
   await page.locator("#btnNew").click();
   const modal = page.getByTestId("print-modal");
   await expect(modal.locator(".mh h2")).toHaveText("Nová tiskovina");
-  await expectValue(modal.locator("#fCat"), type.id);
-  await expectValue(modal.locator("#fCol"), cols[0].id);
+  await expect(modal.locator("#fCat")).toHaveValue(type.id);
+  await expect(modal.locator("#fCol")).toHaveValue(cols[0].id);
   await expect(modal.locator("input[name=fPaid][value=ne]")).toBeChecked();
-  await expect(modal.locator("#fTitle")).toBeFocused();
   await modal.locator("#fTitle").fill(`${TAG} Letáky`);
-  // Czech date entry, normalised with the weekday on blur
-  await setDate(modal.locator("#fDue"), "20.11.2026");
-  await expect(modal.locator("#fDue")).toHaveValue("pá 20. 11. 2026");
-  await expectValue(modal.locator("#fDue"), "2026-11-20");
+  await modal.locator("#fDue").fill("2026-11-20");
   await modal.locator("#fQty").fill("1 000 ks");
   await modal.locator("#fPrice").fill("4 500 Kč");
-  await modal.locator("#fPrice").press("Tab");
-  await expect(modal.locator("#fPrice")).toHaveValue(`4${NB}500`); // formatted on blur, unit as an adornment
-  await expect(modal.locator("#fQty")).toHaveValue(`1${NB}000`);
   await modal.getByRole("button", { name: "Přidat tiskovinu" }).click();
   await expect(modal).toHaveCount(0);
 
   const c = card(page, `${TAG} Letáky`);
   await expect(c.locator(".cat")).toHaveText(type.name);
   await expect(c.locator(".qty")).toHaveText("1 000 ks");
-  await expect(c.locator(".due")).toHaveText(dueInfo("2026-11-20", false, new Date(), "Datum realizace: ").text);
-  await expect(c.locator(".due")).toHaveAttribute("title", /^Datum realizace: 20\.\s11\.\s2026( — |$)/);
+  await expect(c.locator(".due")).toHaveText("20. 11.");
   await expect(c.locator(".price")).toHaveText("4 500 Kč");
   await expect(c.locator(".price")).toHaveClass(/owed/);
   await expect(c.locator(".price")).toHaveAttribute("title", "Dluží FK FM");
-  await expect(c.locator(".price + .sr-only")).toHaveText("dluží FK FM");
   await expect(c.locator(".av")).toHaveCount(0); // no people on print cards
   await expect(column(page, cols[0].title).locator(".sum")).toHaveText("4 500 Kč");
   await expect(page.locator("#ptotL")).toHaveText("Celkem");
@@ -101,8 +88,7 @@ test("create item with price → column sum and „Celkem“; paid / owed / none
   // edit: price + paid → green tag, sums follow
   await c.click();
   await expect(modal.locator(".mh h2")).toHaveText("Tiskovina");
-  await expect(modal.locator("#fPrice")).toHaveValue(`4${NB}500`);
-  await expect(modal.locator(".meta")).toContainText("Založil(a)");
+  await expect(modal.locator("#fPrice")).toHaveValue("4500");
   await modal.locator("#fPrice").fill("5000");
   await modal.locator("label", { hasText: "Ano" }).click();
   await modal.getByRole("button", { name: "Uložit" }).click();
@@ -117,11 +103,11 @@ test("create item with price → column sum and „Celkem“; paid / owed / none
   await expect(page.locator("#ptot")).toHaveText("5 000 Kč");
 
   // month filter by realisation date: label „Celkem za Listopad 2026", option carries the Kč sum
-  await expect.poll(() => optionText(page, "#pmon", "2026-11")).toMatch(/^Listopad 2026 · [\d\s]+\sKč$/);
-  await pick(page, "#pmon", "2026-11");
+  await expect(page.locator("#pmon option[value='2026-11']")).toHaveText(/^Listopad 2026 · [\d\s]+\sKč$/);
+  await page.locator("#pmon").selectOption("2026-11");
   await expect(page.locator("#ptotL")).toHaveText("Celkem za Listopad 2026");
   await expect(page.locator("#board .card h3")).toHaveText([`${TAG} Letáky`]);
-  await pick(page, "#pmon", "none");
+  await page.locator("#pmon").selectOption("none");
   await expect(page.locator("#ptotL")).toHaveText("Celkem bez termínu");
   await expect(page.locator("#board .card h3")).toHaveText([`${TAG} Bez ceny`]);
   await expect(page.locator("#ptot")).toHaveText("0 Kč");
@@ -132,11 +118,11 @@ test("type filter prefills a new item; „+ Přidat tiskovinu“ prefills the co
   const cols = columnsOf(s, "print");
   const types = [...s.printTypes].sort((a, b) => a.sortOrder - b.sortOrder);
   await open(page);
-  await pick(page, "#ptype", types[2].id);
+  await page.locator("#ptype").selectOption(types[2].id);
   await column(page, cols[1].title).locator(".add").click();
   const modal = page.getByTestId("print-modal");
-  await expectValue(modal.locator("#fCat"), types[2].id);
-  await expectValue(modal.locator("#fCol"), cols[1].id);
+  await expect(modal.locator("#fCat")).toHaveValue(types[2].id);
+  await expect(modal.locator("#fCol")).toHaveValue(cols[1].id);
   await page.keyboard.press("Escape");
   await expect(modal).toHaveCount(0);
 });
@@ -166,8 +152,7 @@ test("Typy médií: add, rename (propagates), delete with confirm (items move to
     .poll(async () => (typeId = (await getState(request)).printTypes.find((t) => t.name === `${TAG} Pozvánky`)?.id ?? ""))
     .not.toBe("");
   await createItem(request, { columnId: cols[0].id, typeId, title: `${TAG} Pozvánka` });
-  await expect(row.locator(".n")).toHaveText("1 položka", { timeout: 10_000 });
-  await expect(row.getByRole("button", { name: "Smazat" })).toHaveAttribute("aria-label", `Smazat typ ${TAG} Pozvánky`);
+  await expect(row.locator(".n")).toHaveText("1 položek", { timeout: 10_000 });
 
   // rename via blur
   await row.locator("input").fill(`${TAG} Pozvánky VIP`);
@@ -175,12 +160,12 @@ test("Typy médií: add, rename (propagates), delete with confirm (items move to
   await expect(modal.locator(".urow").last().locator("input")).toHaveValue(`${TAG} Pozvánky VIP`);
   await modal.getByRole("button", { name: "Hotovo" }).click();
   await expect(card(page, `${TAG} Pozvánka`).locator(".cat")).toHaveText(`${TAG} Pozvánky VIP`);
-  await expect.poll(() => optionText(page, "#ptype", typeId)).toBe(`${TAG} Pozvánky VIP (1)`);
+  await expect(page.locator(`#ptype option[value='${typeId}']`)).toHaveText(`${TAG} Pozvánky VIP (1)`);
 
   // delete → confirm → item moves to the first type
   await page.locator("#btnTypes").click();
   page.once("dialog", (d) => {
-    expect(d.message()).toBe(`Typ „${TAG} Pozvánky VIP“ používá 1 tiskovinu. Přesunout ji pod „${first.name}“ a typ smazat?`);
+    expect(d.message()).toBe(`Typ „${TAG} Pozvánky VIP“ používá 1 tiskovin. Přesunout je pod „${first.name}“ a typ smazat?`);
     void d.accept();
   });
   await modal.locator(".urow").last().getByRole("button", { name: "Smazat" }).click();
@@ -212,12 +197,11 @@ test("archived items are hidden from the board and its counts", async ({ page, r
   expect((await request.post(`/api/print/years/${ARCHIVE_YEAR}/close`)).status()).toBe(200);
   await expect(card(page, `${TAG} Archiv`)).toHaveCount(0, { timeout: 10_000 }); // realtime refetch
   await expect(page.locator("#ptot")).toHaveText("0 Kč");
-  await expect.poll(async () => (await optionTexts(page, "#pmon")).filter((t) => t.startsWith(`Květen ${ARCHIVE_YEAR}`))).toEqual([]);
+  await expect(page.locator(`#pmon option[value='${ARCHIVE_YEAR}-05']`)).toHaveCount(0);
 });
 
-test("„Roční přehled“ opens the yearly report below the header; back / tab switch closes it", async ({ page }) => {
+test("„Uzavřít rok“ opens the yearly report below the header; back / tab switch closes it", async ({ page }) => {
   await open(page);
-  await expect(page.locator("#btnYear")).toHaveText("Roční přehled");
   await page.locator("#btnYear").click();
   const report = page.locator(".yv");
   await expect(report).toBeVisible();
@@ -238,52 +222,4 @@ test("„Roční přehled“ opens the yearly report below the header; back / ta
   await page.locator("#tabs button", { hasText: "Tiskoviny" }).click();
   await expect(page.locator("#pbar")).toBeVisible();
   await expect(report).toHaveCount(0);
-});
-
-test("filtered empty state + a11y of the print board, item modal and „Typy médií“", async ({ page, request }) => {
-  const cols = columnsOf(await getState(request), "print");
-  const type = await firstType(request);
-  await createItem(request, { columnId: cols[0].id, typeId: type.id, title: `${TAG} Axe`, price: 900, paidByClub: true, realizationDate: "2031-06-15" });
-  await openApp(page, { view: "print", prMonth: "none" });
-  await page.locator("#pq").fill(`${TAG} Axe`);
-  const banner = page.locator(".board-empty");
-  await expect(banner).toContainText("Filtru neodpovídá žádná tiskovina.");
-  await expectNoA11yViolations(page, { include: ["#pbar", "#board", ".board-status"] });
-  await banner.getByRole("button", { name: "Zrušit filtry" }).click();
-  await expectValue(page.locator("#pmon"), "all");
-  await expect(page.locator("#pq")).toHaveValue("");
-  await page.locator("#pq").fill(`${TAG} Axe`);
-  await expect(card(page, `${TAG} Axe`).locator(".price + .sr-only")).toHaveText("zaplatil FK FM");
-  await expectNoA11yViolations(page, { include: ["#pbar", "#board"] });
-
-  // keyboard open + Esc returns focus
-  await card(page, `${TAG} Axe`).focus();
-  await page.keyboard.press("Enter");
-  const modal = page.getByTestId("print-modal");
-  await expect(modal.locator("#fTitle")).toHaveValue(`${TAG} Axe`);
-  await expectNoA11yViolations(page, { include: ".modal" });
-  await page.keyboard.press("Escape");
-  await expect(card(page, `${TAG} Axe`)).toBeFocused();
-
-  await page.locator("#btnTypes").click();
-  await expect(page.getByTestId("types-modal")).toBeVisible();
-  await expect(page.locator("#tNew")).toBeFocused();
-  await expectNoA11yViolations(page, { include: ".modal" });
-});
-
-test.describe("tablet", () => {
-  test.use({ viewport: { width: 1024, height: 768 } });
-  test("1024 px: both filter bars fit on one row", async ({ page }) => {
-    await open(page);
-    const p = (await page.locator("#pbar").boundingBox())!;
-    expect(p.height).toBeLessThanOrEqual(64);
-    for (const id of ["#pq", "#ptype", "#pmon", "#btnTypes", "#btnYear", ".ptot"]) {
-      const b = (await page.locator(`#pbar ${id}`).boundingBox())!;
-      expect(b.x + b.width, id).toBeLessThanOrEqual(1024);
-      expect(b.y, id).toBeLessThan(p.y + 20);
-    }
-    await page.locator("#tabs button", { hasText: "Úkoly" }).click();
-    const t = (await page.locator("#tbar").boundingBox())!;
-    expect(t.height).toBeLessThanOrEqual(64);
-  });
 });

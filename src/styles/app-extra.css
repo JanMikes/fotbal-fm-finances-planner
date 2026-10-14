@@ -1,18 +1,19 @@
 /* Additions on top of the prototype CSS (not part of the prototype). */
+.app-msg{padding:24px 28px;color:var(--grey-600);font-weight:600}
 
-/* Login page — one focus style (blue border + ring, shared rule in app-ux.css) and one error style (red border, red
-   ring on focus, message = the shared `.f-err` style with its „!" glyph). */
+/* Login page */
 .login{min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px 16px;background:var(--fm-navy)}
-.login-card{width:100%;max-width:400px;background:#fff;border-radius:var(--radius-md);box-shadow:0 24px 60px rgba(0,0,0,.3);padding:32px 28px 28px;display:flex;flex-direction:column;gap:20px}
+.login-card{width:100%;max-width:400px;background:#fff;border-radius:6px;box-shadow:0 24px 60px rgba(0,0,0,.3);padding:28px 24px;display:flex;flex-direction:column;gap:18px}
 .login-brand{display:flex;align-items:center;gap:14px}
-.login-brand img{height:48px;width:auto;display:block}
-.login-brand h1{margin:0;font-size:19px;font-weight:900;letter-spacing:-.02em;text-transform:uppercase;line-height:1.1;color:var(--fm-navy)}
-.login .login-sub{margin:5px 0 0;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--grey-600)}
+.login-brand img{height:44px;width:auto;display:block}
+.login-brand h1{margin:0;font-size:18px;font-weight:900;letter-spacing:-.02em;text-transform:uppercase;line-height:1.1;color:var(--fm-navy)}
 .login .f{display:flex;flex-direction:column;gap:6px}
 .login .f label{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--grey-600)}
-.login .f input{border:1px solid var(--grey-300);border-radius:var(--radius-sm);padding:10px 12px;min-height:var(--control-h,44px);font-size:16px;background:#fff;color:var(--fm-navy)}
-.login .login-err{margin:2px 0 0;font-weight:600}
-.login .btn{width:100%;min-height:44px}
+.login .f input{border:1px solid var(--grey-300);border-radius:3px;padding:10px 12px;min-height:44px;font-size:15px;background:#fff;color:var(--fm-navy)}
+.login .f input:focus{outline:2px solid var(--blue-200);border-color:var(--fm-blue)}
+.login .f input[aria-invalid="true"]{border-color:#b3261e}
+.login-err{margin:-6px 0 0;color:#b3261e;font-size:13px;font-weight:700}
+.login .btn{width:100%}
 
 /* While a card is dragged, mandatory scroll-snap (mobile boards) would snap the edge autoscroll back every frame. */
 body.dragging .board{scroll-snap-type:none}

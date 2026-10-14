@@ -1,6 +1,5 @@
 import { expect, test, type APIRequestContext, type CDPSession, type Locator, type Page } from "@playwright/test";
 import { card, column, columnsOf, createPerson, deleteNode, getState, openApp } from "./boards-helpers";
-import { expectValue, pick } from "./ui-helpers";
 
 /**
  * Robustness fixes: touch drag across columns (the drag survives the card moving to another column), touch cancel,
@@ -171,8 +170,7 @@ test.describe("mobile", () => {
     await t.start(a.x, a.y);
     await t.moveTo(385, a.y, 6); // right edge (< 60 px) → the board scrolls
     await expect(board).toHaveCSS("scroll-snap-type", "none");
-    // 12 px per frame — generous timeout: a loaded parallel run can drop frames
-    await expect.poll(() => board.evaluate((el) => el.scrollLeft), { timeout: 10_000 }).toBeGreaterThan(200);
+    await expect.poll(() => board.evaluate((el) => el.scrollLeft), { timeout: 3000 }).toBeGreaterThan(200);
     await expect(page.locator("body > .card.ghost")).toBeVisible(); // still dragging, not scrolling
     await t.moveTo(200, a.y, 4); // away from the edge
     await t.end();
@@ -187,16 +185,16 @@ test("month filter: a saved month outside the generated range stays selected and
   await createTask(request, { columnId: cols[0].id, title: `${TAG} Month`, dueDate: null });
   // Únor 2024: no task is due then and it is far outside −1…+11 months
   await openTasks(page, { month: "2024-02" });
-  await expectValue(page.locator("#mon"), "2024-02");
-  await expect(page.locator("#mon")).toHaveText("Únor 2024");
+  await expect(page.locator("#mon")).toHaveValue("2024-02");
+  await expect(page.locator("#mon option:checked")).toHaveText("Únor 2024");
   await expect(page.locator("#board .card")).toHaveCount(0);
-  await pick(page, "#mon", "all");
+  await page.locator("#mon").selectOption("all");
   await expect(card(page, `${TAG} Month`)).toBeVisible();
 
   // Tiskoviny: same for the print month (e.g. a month of a closed year)
   await openApp(page, { me, view: "print", prMonth: "2020-02" });
-  await expectValue(page.locator("#pmon"), "2020-02");
-  await expect(page.locator("#pmon")).toHaveText("Únor 2020");
+  await expect(page.locator("#pmon")).toHaveValue("2020-02");
+  await expect(page.locator("#pmon option:checked")).toHaveText("Únor 2020");
   await expect(page.locator("#ptotL")).toHaveText("Celkem za Únor 2020");
 });
 
@@ -240,7 +238,7 @@ test("a stale modal saves only the changed fields (no lost update)", async ({ pa
   expect((await request.patch(`/api/tasks/${id}/move`, { data: { columnId: cols[1].id } })).ok()).toBeTruthy();
   await expect(column(page, cols[1].title).locator(".card", { hasText: `${TAG} Concurrent` })).toHaveCount(1);
   // this user changes only the category
-  await pick(page, modal.locator("#fCat"), "Merch");
+  await modal.locator("#fCat").selectOption("Merch");
   await modal.getByRole("button", { name: "Uložit" }).click();
   await expect(modal).toHaveCount(0);
   await expect
@@ -249,68 +247,6 @@ test("a stale modal saves only the changed fields (no lost update)", async ({ pa
       return `${t.category}|${t.description}|${t.columnId === cols[1].id}`;
     })
     .toBe("Merch|Důležitý popis od A|true");
-});
-
-test("an unchanged print item saves without a PATCH; only a changed price is sent (number baseline)", async ({ page, request }) => {
-  const st = await getState(request);
-  const res = await request.post("/api/print-items", {
-    data: { columnId: columnsOf(st, "print")[0].id, typeId: st.printTypes[0].id, title: `${TAG} Cena`, price: 4500, quantity: null },
-  });
-  expect(res.status()).toBe(201);
-  const id = ((await res.json()) as { id: string }).id;
-  await openApp(page, { me, view: "print" });
-  await page.locator("#pq").fill(TAG);
-  const patches: string[] = [];
-  page.on("request", (r) => {
-    if (r.method() === "PATCH" && r.url().includes(`/api/print-items/${id}`)) patches.push(r.postData() ?? "");
-  });
-  const modal = page.getByTestId("print-modal");
-  await card(page, `${TAG} Cena`).click();
-  await expect(modal.locator("#fPrice")).toHaveValue("4\u00a0500");
-  await modal.getByRole("button", { name: "Uložit" }).click();
-  await expect(modal).toHaveCount(0);
-  await card(page, `${TAG} Cena`).click();
-  await modal.locator("#fPrice").fill("5 200 Kč");
-  await modal.getByRole("button", { name: "Uložit" }).click();
-  await expect(modal).toHaveCount(0);
-  await expect.poll(() => patches.length).toBe(1);
-  expect(JSON.parse(patches[0])).toEqual({ price: 5200 });
-});
-
-test("task modal: unchanged save sends no PATCH; a typed date commits on Ctrl+Enter; invalid date text blocks the save", async ({ page, request }) => {
-  const cols = columnsOf(await getState(request), "tasks");
-  const id = await createTask(request, { columnId: cols[0].id, title: `${TAG} Same`, dueDate: "2026-11-20", description: "Popis" });
-  await openTasks(page);
-  const patches: string[] = [];
-  page.on("request", (r) => {
-    if (r.method() === "PATCH" && r.url().includes(`/api/tasks/${id}`)) patches.push(r.postData() ?? "");
-  });
-  const modal = page.getByTestId("task-modal");
-  await card(page, `${TAG} Same`).click();
-  await expect(modal.locator("#fDue")).toHaveValue("pá 20. 11. 2026");
-  // tab through every field without changing anything
-  await modal.locator("#fDue").focus();
-  await modal.locator("#fDesc").focus();
-  await modal.getByRole("button", { name: "Uložit" }).click();
-  await expect(modal).toHaveCount(0);
-
-  // invalid text: the save is blocked, the field says why and keeps the text
-  await card(page, `${TAG} Same`).click();
-  await modal.locator("#fDue").fill("31. 2.");
-  await page.keyboard.press("ControlOrMeta+Enter");
-  await expect(modal).toBeVisible();
-  await expect(modal.locator("#fDue")).toHaveAttribute("aria-invalid", "true");
-  await expect(modal.locator("#fDue-rel")).toHaveText("Datum nerozpoznáno");
-  await expect(modal.locator("#fDue")).toHaveValue("31. 2.");
-  await modal.getByRole("button", { name: "Uložit" }).click();
-  await expect(modal).toBeVisible();
-  expect(patches).toEqual([]);
-  // a short date („24. 12. 26" is only complete on Enter / blur) is committed by Ctrl+Enter itself
-  await modal.locator("#fDue").fill("24. 12. 26");
-  await page.keyboard.press("ControlOrMeta+Enter");
-  await expect(modal).toHaveCount(0);
-  await expect.poll(() => patches.length).toBe(1);
-  expect(JSON.parse(patches[0])).toEqual({ dueDate: "2026-12-24" });
 });
 
 test("a failed refetch is retried: the client catches up and shows „Offline“ meanwhile (no raw proxy text)", async ({ page, request }) => {

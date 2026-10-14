@@ -1,23 +1,21 @@
 "use client";
-/**
- * Member form „Člen týmu" / „Nový člen" (prototype §10.10). Saves optimistically and closes at once; an edit sends
- * only the changed fields (`changedFields` against the values the form opened with).
- */
-import { useRef, useState } from "react";
-import { Button, Field, fieldA11y, Modal, MoneyInput, useCloseWhenDeleted } from "@/components/ui";
-import { AREAS, AVPAL, BUDGET_COLORS, colorName } from "@/lib/constants";
+/** Member form „Člen týmu" / „Nový člen" (prototype §10.10). */
+import { useEffect, useRef, useState } from "react";
+import { Modal } from "@/components/ui/Modal";
+import { useCloseWhenDeleted } from "@/components/ui/useCloseWhenDeleted";
+import { AREAS, AVPAL, BUDGET_COLORS } from "@/lib/constants";
+import { nf, parseDigits } from "@/lib/format";
 import { changedFields, isEmptyPatch } from "@/lib/patch";
 import { useActions, useAppState, usePrefs } from "@/lib/store/react";
-import { assignedTaskCount, colorOf, inkOn, parentOptions } from "@/lib/tree";
+import { assignedTaskCount, colorOf, parentOptions } from "@/lib/tree";
 import type { BudgetColor } from "@/lib/types";
-import { assignedTasksLabel } from "./orgText";
 import { ParentSelect } from "./ParentSelect";
 
 interface FormValues {
   name: string;
   role: string;
   info: string;
-  budget: number | null;
+  budget: string;
   color: string;
   budColor: BudgetColor;
   parent: string;
@@ -30,7 +28,7 @@ function toFields(v: FormValues) {
     name: v.name.trim(),
     role: v.role.trim() || null,
     info: v.info.trim() || null,
-    budget: v.budget,
+    budget: parseDigits(v.budget),
     budgetColor: v.budColor,
     avatarColor: v.color || null,
     parentId: v.parent || null,
@@ -50,7 +48,7 @@ export function MemberForm({ id, parentId, onClose, onOpenMember }: { id: string
     name: ex?.name ?? "",
     role: ex?.role ?? "",
     info: ex?.info ?? "",
-    budget: ex?.budget ?? null,
+    budget: ex?.budget ? nf(ex.budget) : "",
     color: ex ? ex.avatarColor || colorOf(state.nodes, ex.id) : "",
     budColor: ex?.budgetColor ?? "blue",
     parent: ex ? (ex.parentId ?? "") : (parentId ?? ""),
@@ -59,13 +57,20 @@ export function MemberForm({ id, parentId, onClose, onOpenMember }: { id: string
   const [name, setName] = useState(init.name);
   const [role, setRole] = useState(init.role);
   const [info, setInfo] = useState(init.info);
-  const [budget, setBudget] = useState<number | null>(init.budget);
+  const [budget, setBudget] = useState(init.budget);
   const [color, setColor] = useState<string>(init.color);
   const [budColor, setBudColor] = useState<BudgetColor>(init.budColor);
   const [parent, setParent] = useState<string>(init.parent);
   const [areas, setAreas] = useState<string[]>(init.areas);
   const [nameErr, setNameErr] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (ex) return;
+    const t = setTimeout(() => nameRef.current?.focus(), 30);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const opts = parentOptions(state.nodes, ex?.id ?? null);
 
@@ -106,77 +111,73 @@ export function MemberForm({ id, parentId, onClose, onOpenMember }: { id: string
     }
   };
 
-  const nameError = nameErr ? "Vyplňte jméno" : null;
-
   return (
     <Modal
       title={ex ? "Člen týmu" : "Nový člen"}
       onClose={onClose}
       portal
       testId="member-modal"
-      initialFocus={ex ? undefined : "#mName"}
-      onSubmit={save}
-      meta={ex ? assignedTasksLabel(assignedTaskCount(ex.id, state.tasks)) : undefined}
-      footStart={
-        ex ? (
-          <>
-            {ex.id !== prefs.me && (
-              <Button variant="danger" id="mDel" className="mf-ic mf-ic--del" onClick={remove}>
-                Odebrat
-              </Button>
-            )}
-            <Button variant="outline" id="mDup" className="mf-ic mf-ic--dup" onClick={duplicate}>
-              Duplikovat
-            </Button>
-          </>
-        ) : undefined
-      }
       foot={
         <>
-          <Button variant="outline" onClick={onClose}>
+          <span className="meta">{ex ? `${assignedTaskCount(ex.id, state.tasks)} přiřazených úkolů` : ""}</span>
+          {ex && ex.id !== prefs.me && (
+            <button type="button" className="btn danger" id="mDel" onClick={remove}>
+              Odebrat
+            </button>
+          )}
+          {ex && (
+            <button type="button" className="btn outline" id="mDup" onClick={duplicate}>
+              Duplikovat
+            </button>
+          )}
+          <button type="button" className="btn outline" onClick={onClose}>
             Zrušit
-          </Button>
-          <Button variant="primary" id="mOk" onClick={save}>
+          </button>
+          <button type="button" className="btn primary" id="mOk" onClick={save}>
             {ex ? "Uložit" : "Přidat člena"}
-          </Button>
+          </button>
         </>
       }
     >
       <div className="mb">
-        <Field label="Jméno a příjmení" htmlFor="mName" required error={nameError}>
+        <div className="f">
+          <label htmlFor="mName">
+            Jméno a příjmení <span className="req">*</span>
+          </label>
           <input
             id="mName"
             ref={nameRef}
             value={name}
             placeholder="Např. Jana Nováková"
-            autoComplete="off"
-            onChange={(e) => {
-              setName(e.target.value);
-              if (nameErr && e.target.value.trim()) setNameErr(false);
-            }}
-            {...fieldA11y("mName", { error: nameError, required: true })}
+            style={nameErr ? { borderColor: "#b3261e" } : undefined}
+            onChange={(e) => setName(e.target.value)}
           />
-        </Field>
-        <Field label="Role" htmlFor="mRole">
-          <input id="mRole" value={role} placeholder="Např. Sociální sítě" autoComplete="off" onChange={(e) => setRole(e.target.value)} />
-        </Field>
-        <Field label="Krátká informace" htmlFor="mInfo" wide hint="Zobrazí se po kliknutí na „i“ na kartě člena.">
-          <textarea
-            id="mInfo"
-            className="tm-info"
-            value={info}
-            placeholder="Např. kontakt, dostupnost, na co se obracet…"
-            onChange={(e) => setInfo(e.target.value)}
-            {...fieldA11y("mInfo", { hint: true })}
-          />
-        </Field>
-        <Field label="Nadřízený" htmlFor="mBoss">
-          <ParentSelect id="mBoss" value={parent} onChange={setParent} emptyLabel="— nikdo (vedení týmu) —" options={opts} />
-        </Field>
-        <Field label="Budget" htmlFor="mBud">
-          <MoneyInput id="mBud" value={budget} onChange={setBudget} suffix="Kč" placeholder="Např. 25 000" />
-        </Field>
-        <Field label="Stav budgetu" group wide>
+        </div>
+        <div className="f">
+          <label htmlFor="mRole">Role</label>
+          <input id="mRole" value={role} placeholder="Např. Sociální sítě" onChange={(e) => setRole(e.target.value)} />
+        </div>
+        <div className="f w">
+          <label htmlFor="mInfo">Krátká informace</label>
+          <textarea id="mInfo" style={{ minHeight: 80 }} value={info} placeholder="Např. kontakt, dostupnost, na co se obracet…" onChange={(e) => setInfo(e.target.value)} />
+        </div>
+        <div className="f">
+          <label htmlFor="mBud">Budget</label>
+          <input id="mBud" inputMode="numeric" value={budget} placeholder="Např. 25 000" onChange={(e) => setBudget(e.target.value)} />
+        </div>
+        <div className="f w">
+          <span className="lbl">Barva profilu</span>
+          <div className="avpick">
+            {AVPAL.map((c) => (
+              <label key={c} title={c}>
+                <input type="radio" name="avc" value={c} checked={color === c} onChange={() => setColor(c)} />
+                <i style={{ background: c }} />
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className="f">
+          <span className="lbl">Stav budgetu</span>
           <div className="budc">
             {BUDGET_COLORS.map((b) => (
               <label key={b.value}>
@@ -186,18 +187,13 @@ export function MemberForm({ id, parentId, onClose, onOpenMember }: { id: string
               </label>
             ))}
           </div>
-        </Field>
-        <Field label="Barva profilu" group wide>
-          <div className="avpick">
-            {AVPAL.map((c) => (
-              <label key={c} title={c}>
-                <input type="radio" name="avc" value={c} checked={color === c} onChange={() => setColor(c)} aria-label={colorName(c)} />
-                <i style={{ background: c, color: inkOn(c).ink }} />
-              </label>
-            ))}
-          </div>
-        </Field>
-        <Field label="Oblasti, na které se zaměřuje" group wide>
+        </div>
+        <div className="f w">
+          <label htmlFor="mBoss">Nadřízený</label>
+          <ParentSelect id="mBoss" value={parent} onChange={setParent} emptyLabel="— nikdo (vedení týmu) —" options={opts} />
+        </div>
+        <div className="f w">
+          <span className="lbl">Oblasti, na které se zaměřuje</span>
           <div className="chkgrid">
             {AREAS.map((a) => (
               <label key={a}>
@@ -211,7 +207,7 @@ export function MemberForm({ id, parentId, onClose, onOpenMember }: { id: string
               </label>
             ))}
           </div>
-        </Field>
+        </div>
       </div>
     </Modal>
   );

@@ -7,17 +7,9 @@
  *   3. on error: removes ONLY that op — the state is rebuilt from the confirmed base plus the other pending ops —
  *      and records `error`,
  *   4. when no mutation is pending any more, refetches /api/state to reconcile with the server.
- * Ordering (per entity): every request is the new "tail" of the entity it targets — the ids in `deps.creates`, else
- * `deps.after[0]`. A later mutation keeps its optimistic patch but sends its request only once the tails of all ids in
- * its `deps.after` (and `deps.creates`) have settled: a rename right after an optimistic create cannot 404, and a
- * second move / update of the same card cannot overtake the first one (last write wins in click order). Tails settle
- * whether the request succeeds or fails, and a request only ever waits for earlier ones, so a failure never blocks
- * (or deadlocks) the queue. The request itself is unchanged.
  * Refetches: no load starts while mutations are in flight, and a /api/state response is ignored when any mutation
  * started or settled after the request was sent (the server snapshot may predate that mutation's commit); a fresh
- * refetch runs once mutations settle. A refetch requested while a load is in flight does not abort it (under steady
- * realtime traffic a slow first load would otherwise never finish); one more load runs right after it instead. Only a
- * load older than 10 s is aborted and replaced (hung request). Failed loads are
+ * refetch runs once mutations settle. Failed loads are
  * retried with exponential backoff (1 s → 30 s); `stale` is true while they fail (the UI shows „Offline").
  */
 import { api, ApiError } from "../api";
@@ -41,18 +33,7 @@ export interface StoreSnapshot {
 type Listener = () => void;
 type Op = { fn: (s: AppState) => AppState };
 
-/**
- * Ordering hints for `mutate`: ids this request creates, and ids it targets (first) / references — it is sent after
- * the in-flight requests on those ids.
- */
-export interface MutationDeps {
-  creates?: readonly string[];
-  after?: readonly (string | null | undefined)[];
-}
-
 const RETRY_MAX_MS = 30_000;
-/** An in-flight load younger than this is awaited (follow-up queued) rather than aborted. */
-const LOAD_REPLACE_MS = 10_000;
 
 export class AppStore {
   private snap: StoreSnapshot = { state: null, status: "loading", error: null, online: false, stale: false, pending: 0 };
@@ -65,15 +46,10 @@ export class AppStore {
   /** Incremented whenever a mutation starts or settles; a load that saw another epoch is stale. */
   private mutationEpoch = 0;
   private abort: AbortController | null = null;
-  private inflight: Promise<void> | null = null;
-  private inflightSince = 0;
-  private loadAgain = false;
   /** Server state + optimistic patches of mutations that already succeeded (not yet refetched). */
   private base: AppState | null = null;
   /** Optimistic patches of in-flight mutations, in start order. */
   private ops: Op[] = [];
-  /** Entity id → its latest in-flight request (settles, never rejects); removed once it settled and is still the tail. */
-  private tails = new Map<string, Promise<void>>();
 
   constructor(
     private readonly fetchState: (signal?: AbortSignal) => Promise<AppState> = api.state,
@@ -119,35 +95,13 @@ export class AppStore {
     this.set({ error: message });
   }
 
-  /** Load /api/state now (or right after the load in flight). Stale responses (older than a mutation) are ignored. */
+  /** Load /api/state now. Stale responses (older than a later load or than a mutation) are ignored. */
   async load(): Promise<void> {
     if (this.snap.pending > 0) {
       // a snapshot taken now could miss an in-flight mutation's commit → load once mutations settle
       this.refetchWanted = true;
       return;
     }
-    if (this.inflight && Date.now() - this.inflightSince < LOAD_REPLACE_MS) {
-      this.loadAgain = true;
-      return this.inflight;
-    }
-    this.loadAgain = false;
-    const run = this.fetchAndApply();
-    this.inflight = run;
-    this.inflightSince = Date.now();
-    try {
-      await run;
-    } finally {
-      if (this.inflight === run) {
-        this.inflight = null;
-        if (this.loadAgain) {
-          this.loadAgain = false;
-          void this.load();
-        }
-      }
-    }
-  }
-
-  private async fetchAndApply(): Promise<void> {
     const seq = ++this.loadSeq;
     const epoch = this.mutationEpoch;
     if (this.retryTimer) clearTimeout(this.retryTimer);
@@ -174,8 +128,6 @@ export class AppStore {
       // background refetch failures are not toasted (the „Offline" pill covers them); a failed first load shows its error
       this.set({ status: hasState ? "ready" : "error", stale: true, ...(hasState ? {} : { error: messageOf(err) }) });
       this.scheduleRetry();
-    } finally {
-      if (this.abort === ac) this.abort = null;
     }
   }
 
@@ -210,34 +162,13 @@ export class AppStore {
   }
 
   /** Apply an optimistic change and run the request. Resolves with the request result; rejects on error (after rollback). */
-  async mutate<T>(optimistic: ((s: AppState) => AppState) | null, run: () => Promise<T>, deps: MutationDeps = {}): Promise<T> {
+  async mutate<T>(optimistic: ((s: AppState) => AppState) | null, run: () => Promise<T>): Promise<T> {
     this.mutationEpoch++;
     const op: Op | null = optimistic ? { fn: optimistic } : null;
     if (op) this.ops.push(op);
     this.set({ state: this.compose(), pending: this.snap.pending + 1 });
-    const targets = deps.creates?.length ? deps.creates : deps.after?.[0] ? [deps.after[0]] : [];
-    const waits = [...new Set([...(deps.after ?? []), ...targets])].flatMap((id) => (id && this.tails.get(id)) || []);
-    // a failed earlier request is not our failure: this one still runs and reports its own error (e.g. 404)
-    const start = (): Promise<T> => {
-      try {
-        return run();
-      } catch (err) {
-        return Promise.reject(err);
-      }
-    };
-    const request = waits.length > 0 ? Promise.all(waits).then(start) : start(); // no wait → sent synchronously (keepalive on pagehide)
-    if (targets.length) {
-      const done = request.then(
-        () => undefined,
-        () => undefined,
-      );
-      for (const id of targets) this.tails.set(id, done);
-      void done.then(() => {
-        for (const id of targets) if (this.tails.get(id) === done) this.tails.delete(id);
-      });
-    }
     try {
-      const result = await request;
+      const result = await run();
       if (op) {
         this.ops = this.ops.filter((o) => o !== op);
         if (this.base) this.base = applySafe(op.fn, this.base);
@@ -251,11 +182,6 @@ export class AppStore {
       this.settle();
       throw err;
     }
-  }
-
-  /** Number of entities with a request in flight (tests). */
-  get inFlightEntities(): number {
-    return this.tails.size;
   }
 
   private settle() {

@@ -6,9 +6,8 @@ import type { Budget, OrgNode } from "@/lib/types";
 
 export type BudgetField = "spolek" | "asAmount" | "monthlyInstallment";
 
-/** Typed values not saved yet (amount or raw text; null = emptied) override the stored numbers in the live computation. */
-export type BudgetDraftValue = number | string | null;
-export type BudgetDraft = Partial<Record<BudgetField, BudgetDraftValue>>;
+/** Draft texts of focused/unsaved inputs override the stored numbers in the live computation. */
+export type BudgetDraft = Partial<Record<BudgetField, string>>;
 
 export function applyDraft(budget: Budget, draft: BudgetDraft): Budget {
   const b = { ...budget };
@@ -33,18 +32,18 @@ export function budgetView(budget: Budget, nodes: readonly OrgNode[], now: Date 
 }
 
 /**
- * PUT /api/budget payload for an edited input (a parsed amount, or raw text → digits only; empty = 0). The first non-zero installment also sets
+ * PUT /api/budget payload for an edited input: digits only. The first non-zero installment also sets
  * `installmentFrom` to the current month when none is set yet (DECISIONS #2 — the server does the same,
  * sending it makes the optimistic state correct immediately).
  */
-export function budgetPatch(field: BudgetField, input: BudgetDraftValue, budget: Budget, now: Date = new Date()): BudgetInput {
-  const value = parseDigitsOrZero(input);
+export function budgetPatch(field: BudgetField, text: string, budget: Budget, now: Date = new Date()): BudgetInput {
+  const value = parseDigitsOrZero(text);
   const patch: BudgetInput = { [field]: value };
   if (field === "monthlyInstallment" && value > 0 && !budget.installmentFrom) patch.installmentFrom = monthKey(now);
   return patch;
 }
 
-/** MonthInput value ("YYYY-MM" | "") for the stored "YYYY-MM-01". */
+/** `<input type="month">` value for the stored "YYYY-MM-01". */
 export function monthInputValue(installmentFrom: string | null): string {
   return installmentFrom ? installmentFrom.slice(0, 7) : "";
 }

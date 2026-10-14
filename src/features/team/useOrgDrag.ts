@@ -17,15 +17,6 @@ export interface DragView {
   rootOver: boolean;
 }
 
-/**
- * The element that scrolls the tree horizontally: the tree itself when it is its own `overflow-x` scroller (> 760 px,
- * see team.css), otherwise the whole tab.
- */
-export function horizontalScroller(container: HTMLElement): HTMLElement {
-  const tree = container.querySelector<HTMLElement>("#tree");
-  return tree && tree.scrollWidth > tree.clientWidth + 1 && getComputedStyle(tree).overflowX !== "visible" ? tree : container;
-}
-
 const IDLE: DragView = { dragId: null, overId: null, overPos: null, rootOver: false };
 
 interface DragState {
@@ -124,7 +115,6 @@ export function useOrgDrag({
     g.classList.remove("drop", "drop-before", "drop-after", "ph");
     g.removeAttribute("tabindex");
     g.setAttribute("aria-hidden", "true");
-    g.inert = true; // the cloned name / „i" / „+" buttons must not be focusable
     g.style.width = r.width + "px";
     document.body.appendChild(g);
     o.ghost = g;
@@ -132,18 +122,15 @@ export function useOrgDrag({
     document.body.classList.add("dragging", "odrag");
     publish({ dragId: o.id, overId: null, overPos: null, rootOver: false });
     move();
-    // autoscroll the tab within 60 px of its edges (12 px per frame), re-evaluating the target. Horizontally the
-    // tree itself scrolls when it is its own scroller (> 760 px), else the tab.
+    // autoscroll the tab within 60 px of its edges (12 px per frame), re-evaluating the target
     const loop = () => {
       const cur = O.current;
       const c = containerRef.current;
       if (!cur || !cur.active || !c) return;
       const cr = c.getBoundingClientRect();
       const m = 60;
-      const sx = horizontalScroller(c);
-      const xr = sx === c ? cr : sx.getBoundingClientRect();
-      if (cur.x < xr.left + m) sx.scrollLeft -= 12;
-      else if (cur.x > xr.right - m) sx.scrollLeft += 12;
+      if (cur.x < cr.left + m) c.scrollLeft -= 12;
+      else if (cur.x > cr.right - m) c.scrollLeft += 12;
       if (cur.y < cr.top + m) c.scrollTop -= 12;
       else if (cur.y > cr.bottom - m) c.scrollTop += 12;
       move();

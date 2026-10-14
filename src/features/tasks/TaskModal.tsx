@@ -1,16 +1,8 @@
 "use client";
-/**
- * Task modal „Úkol" / „Nový úkol" (prototype §8). Fullscreen on mobile (Modal CSS). Ctrl/Cmd+Enter saves; a new task
- * focuses Název (desktop); a missing title shows an inline error. Saving PATCHes only the changed fields.
- */
+/** Task modal „Úkol" / „Nový úkol" (prototype §8). Fullscreen on mobile via the prototype CSS. */
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/Button";
-import { DateInput } from "@/components/ui/DateInput";
-import { Field, fieldA11y } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
-import { Select, type SelectGroup, type SelectOption } from "@/components/ui/Select";
 import { DELETED_NOTICE, useCloseWhenDeleted } from "@/components/ui/useCloseWhenDeleted";
-import { useToday } from "@/components/ui/useToday";
 import {
   AttachmentBox,
   applyAttachmentDraft,
@@ -23,15 +15,12 @@ import {
 import { uuid } from "@/lib/api";
 import { CATEGORY_OPTGROUPS, CATS } from "@/lib/constants";
 import { columnsOf, defaultTaskCategory } from "@/lib/filters";
-import { formatDateWithRelative } from "@/lib/dates";
+import { formatDate } from "@/lib/format";
 import { changedFields, isEmptyPatch } from "@/lib/patch";
 import { useActions, useAppState, usePrefs, useStore } from "@/lib/store/react";
 import { personsInOrder } from "@/lib/tree";
 
 type TaskForm = { category: string; columnId: string; title: string; dueDate: string; description: string; leadId: string; ownerId: string };
-
-const TITLE_REQUIRED = "Vyplňte název úkolu";
-const CATEGORY_GROUPS: SelectGroup[] = CATEGORY_OPTGROUPS.map((g) => ({ label: g.label, options: g.options.map((c) => ({ value: c, label: c })) }));
 
 /** Form values → API fields (shared by the save payload and the „unchanged" baseline). */
 function taskFields(f: TaskForm) {
@@ -61,10 +50,8 @@ export function TaskModal({
   const [prefs] = usePrefs();
   const actions = useActions();
   const store = useStore();
-  const today = useToday();
   const cols = columnsOf(state.columns, "tasks");
   const persons = personsInOrder(state.nodes);
-  const personOptions: SelectOption[] = [{ value: "", label: "— nevybráno —" }, ...persons.map((p) => ({ value: p.id, label: p.name, meta: p.role ?? undefined }))];
 
   // after a successful create (e.g. an upload failed afterwards) the modal behaves as „existing"
   const [savedId, setSavedId] = useState<string | null>(null);
@@ -87,12 +74,16 @@ export function TaskModal({
   const [f, setF] = useState(init);
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((p) => ({ ...p, [k]: v }));
   const [draft, setDraft] = useState<AttachmentDraft>(emptyDraft);
-  const [titleErr, setTitleErr] = useState<string | null>(null);
+  const [titleErr, setTitleErr] = useState(false);
   const [busy, setBusy] = useState(false);
-  /** The date field holds text that is not a date („Datum nerozpoznáno") — saving is blocked until it is fixed. */
-  const [dateBad, setDateBad] = useState(false);
-  const [dupBusy, setDupBusy] = useState(false);
   const titleRef = useRef<HTMLInputElement | null>(null);
+
+  // new task: focus the title after 30 ms (prototype)
+  useEffect(() => {
+    if (id) return;
+    const t = setTimeout(() => titleRef.current?.focus(), 30);
+    return () => clearTimeout(t);
+  }, [id]);
 
   // deleted elsewhere while open → close with a notice (instead of turning into a „new" form)
   useCloseWhenDeleted(!!currentId && !ex, onClose);
@@ -110,15 +101,10 @@ export function TaskModal({
   const creator = ex?.createdBy ? state.nodes.find((n) => n.id === ex.createdBy && n.kind === "person") : undefined;
 
   const save = async () => {
-    if (busy) return;
     const title = f.title.trim();
     if (!title) {
-      setTitleErr(TITLE_REQUIRED);
+      setTitleErr(true);
       titleRef.current?.focus();
-      return;
-    }
-    if (dateBad) {
-      document.getElementById("fDue")?.focus(); // its hint says „Datum nerozpoznáno"
       return;
     }
     const fields = taskFields(f);
@@ -153,15 +139,13 @@ export function TaskModal({
   };
 
   const duplicate = async () => {
-    if (!ex || dupBusy) return;
-    setDupBusy(true);
+    if (!ex) return;
     try {
       const res = await actions.duplicateTask(ex.id, prefs.me);
       onOpenTask(res.task.id);
     } catch {
       /* toast */
     }
-    if (mounted.current) setDupBusy(false);
   };
 
   const remove = () => {
@@ -175,68 +159,98 @@ export function TaskModal({
       title={ex ? "Úkol" : "Nový úkol"}
       onClose={onClose}
       testId="task-modal"
-      onSubmit={save}
-      initialFocus={id ? undefined : "#fTitle"}
-      meta={ex && creator ? `Založil(a) ${creator.name} · ${formatDateWithRelative(ex.createdAt, today)}` : undefined}
-      footStart={
-        ex ? (
-          <>
-            <Button variant="danger" id="del" className="mf-ic mf-ic--del" onClick={remove}>
-              Smazat
-            </Button>
-            <Button variant="outline" id="dup" className="mf-ic mf-ic--dup" busy={dupBusy} onClick={duplicate}>
-              Duplikovat
-            </Button>
-          </>
-        ) : undefined
-      }
       foot={
         <>
-          <Button variant="outline" data-close2="" onClick={onClose}>
+          <span className="meta">{ex && creator ? `Založil(a) ${creator.name}, ${formatDate(ex.createdAt)}` : ""}</span>
+          {ex && (
+            <>
+              <button className="btn danger" id="del" type="button" onClick={remove}>
+                Smazat
+              </button>
+              <button className="btn outline" id="dup" type="button" onClick={duplicate}>
+                Duplikovat
+              </button>
+            </>
+          )}
+          <button className="btn outline" data-close2="" type="button" onClick={onClose}>
             Zrušit
-          </Button>
-          <Button variant="primary" id="ok" busy={busy} onClick={save}>
+          </button>
+          <button className="btn primary" id="ok" type="button" disabled={busy} onClick={save}>
             {ex ? "Uložit" : "Vytvořit úkol"}
-          </Button>
+          </button>
         </>
       }
     >
       <div className="mb">
-        <Field label="Kategorie" htmlFor="fCat">
-          <Select id="fCat" value={f.category} onChange={(v) => set("category", v)} options={CATEGORY_GROUPS} />
-        </Field>
-        <Field label="Stav" htmlFor="fCol">
-          <Select id="fCol" value={f.columnId} onChange={(v) => set("columnId", v)} options={cols.map((c) => ({ value: c.id, label: c.title }))} />
-        </Field>
-        <Field label="Název úkolu" htmlFor="fTitle" required error={titleErr}>
+        <div className="f">
+          <label htmlFor="fCat">Kategorie</label>
+          <select id="fCat" value={f.category} onChange={(e) => set("category", e.target.value)}>
+            {CATEGORY_OPTGROUPS.map((g) => (
+              <optgroup key={g.label} label={g.label}>
+                {g.options.map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </div>
+        <div className="f">
+          <label htmlFor="fCol">Stav</label>
+          <select id="fCol" value={f.columnId} onChange={(e) => set("columnId", e.target.value)}>
+            {cols.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.title}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="f">
+          <label htmlFor="fTitle">
+            Název úkolu <span className="req">*</span>
+          </label>
           <input
             ref={titleRef}
             id="fTitle"
             value={f.title}
             placeholder="Např. Plakát na domácí zápas"
-            autoComplete="off"
-            {...fieldA11y("fTitle", { error: titleErr, required: true })}
-            onChange={(e) => {
-              set("title", e.target.value);
-              if (titleErr && e.target.value.trim()) setTitleErr(null);
-            }}
+            style={titleErr ? { borderColor: "#b3261e" } : undefined}
+            onChange={(e) => set("title", e.target.value)}
           />
-        </Field>
-        <Field label="Předpokládaný termín dokončení" htmlFor="fDue">
-          <DateInput id="fDue" value={f.dueDate} onChange={(v) => set("dueDate", v)} onValidityChange={(ok) => setDateBad(!ok)} />
-        </Field>
-        <Field label="Popis" htmlFor="fDesc" wide>
+        </div>
+        <div className="f">
+          <label htmlFor="fDue">Předpokládaný termín dokončení</label>
+          <input id="fDue" type="date" value={f.dueDate} onChange={(e) => set("dueDate", e.target.value)} />
+        </div>
+        <div className="f w">
+          <label htmlFor="fDesc">Popis</label>
           <textarea id="fDesc" placeholder="Co je potřeba udělat, termíny, formáty…" value={f.description} onChange={(e) => set("description", e.target.value)} />
-        </Field>
-        <Field label="Zodpovědný vedoucí" htmlFor="fLead">
-          <Select id="fLead" value={f.leadId} onChange={(v) => set("leadId", v)} options={personOptions} />
-        </Field>
-        <Field label="Zodpovědný za úkol" htmlFor="fOwner">
-          <Select id="fOwner" value={f.ownerId} onChange={(v) => set("ownerId", v)} options={personOptions} />
-        </Field>
-        <Field label="Přílohy a odkazy" wide group>
+        </div>
+        <div className="f">
+          <label htmlFor="fLead">Zodpovědný vedoucí</label>
+          <select id="fLead" value={f.leadId} onChange={(e) => set("leadId", e.target.value)}>
+            <option value="">— nevybráno —</option>
+            {persons.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="f">
+          <label htmlFor="fOwner">Zodpovědný za úkol</label>
+          <select id="fOwner" value={f.ownerId} onChange={(e) => set("ownerId", e.target.value)}>
+            <option value="">— nevybráno —</option>
+            {persons.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="f w">
+          <span className="lbl">Přílohy a odkazy</span>
           <AttachmentBox existing={attachmentsOf(state.attachments, "task", currentId)} draft={draft} onChange={setDraft} />
-        </Field>
+        </div>
       </div>
     </Modal>
   );

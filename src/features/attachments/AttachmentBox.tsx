@@ -3,17 +3,12 @@
  * „Přílohy a odkazy" box of the task / print modal (prototype §8.4).
  * The prototype edits attachments on a working copy and applies them on Save; the API needs an existing parent, so
  * the modal keeps a draft (pending files / links / removed ids) and calls `applyAttachmentDraft` after saving the item.
- * Files: drop zone with a real „Vybrat soubory" button (fine pointer) or one full-width „Přidat soubor / fotku"
- * button (touch); both click the hidden `#fFile`. Links: `#lUrl` + `#lLabel`, Enter or „Přidat odkaz".
  */
-import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/Button";
-import { useCoarsePointer } from "@/components/ui/useCoarsePointer";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { MAX_UPLOAD_BYTES } from "@/lib/constants";
 import { fmtSize, normalizeUrl } from "@/lib/format";
 import type { Actions } from "@/lib/store/actions";
 import type { Attachment, ParentKind } from "@/lib/types";
-import "./attachments.css";
 
 export interface PendingFile {
   key: string;
@@ -37,6 +32,9 @@ export const emptyDraft = (): AttachmentDraft => ({ removed: new Set(), files: [
 let seq = 0;
 const key = () => `p${++seq}`;
 
+/** Inline styles copied verbatim from the prototype markup (`#lUrl`, `#lLabel`). */
+const LINK_INPUT_STYLE: CSSProperties = { border: "1px solid var(--grey-300)", borderRadius: 3, padding: "0 12px", fontSize: 15 };
+
 export function AttachmentBox({
   existing,
   draft,
@@ -47,8 +45,6 @@ export function AttachmentBox({
   onChange: (d: AttachmentDraft) => void;
 }) {
   const [over, setOver] = useState(false);
-  const coarse = useCoarsePointer();
-  const fileRef = useRef<HTMLInputElement | null>(null);
   const urlRef = useRef<HTMLInputElement | null>(null);
   const labelRef = useRef<HTMLInputElement | null>(null);
   const draftRef = useRef(draft);
@@ -88,7 +84,6 @@ export function AttachmentBox({
   };
 
   const remove = (id: string) => onChange({ ...draft, removed: new Set([...draft.removed, id]) });
-  const pickFiles = () => fileRef.current?.click();
 
   return (
     <div className="attbox">
@@ -100,7 +95,7 @@ export function AttachmentBox({
               {a.name}
             </a>
             <span className="sz">{fmtSize(a.sizeBytes)}</span>
-            <button type="button" aria-label={`Odebrat ${a.name}`} title="Odebrat" onClick={() => remove(a.id)}>
+            <button type="button" aria-label="Odebrat" onClick={() => remove(a.id)}>
               ×
             </button>
           </div>
@@ -114,8 +109,7 @@ export function AttachmentBox({
             <span className="sz">{fmtSize(f.file.size)}</span>
             <button
               type="button"
-              aria-label={`Odebrat ${f.file.name}`}
-              title="Odebrat"
+              aria-label="Odebrat"
               onClick={() => {
                 URL.revokeObjectURL(f.url);
                 onChange({ ...draft, files: draft.files.filter((x) => x.key !== f.key) });
@@ -131,7 +125,7 @@ export function AttachmentBox({
             <a href={a.url} target="_blank" rel="noopener noreferrer">
               {a.name || a.url}
             </a>
-            <button type="button" aria-label={`Odebrat ${a.name || a.url}`} title="Odebrat" onClick={() => remove(a.id)}>
+            <button type="button" aria-label="Odebrat" onClick={() => remove(a.id)}>
               ×
             </button>
           </div>
@@ -142,57 +136,38 @@ export function AttachmentBox({
             <a href={l.url} target="_blank" rel="noopener noreferrer">
               {l.label || l.url}
             </a>
-            <button
-              type="button"
-              aria-label={`Odebrat ${l.label || l.url}`}
-              title="Odebrat"
-              onClick={() => onChange({ ...draft, links: draft.links.filter((x) => x.key !== l.key) })}
-            >
+            <button type="button" aria-label="Odebrat" onClick={() => onChange({ ...draft, links: draft.links.filter((x) => x.key !== l.key) })}>
               ×
             </button>
           </div>
         ))}
       </div>
-      {coarse ? (
-        <Button variant="outline" block className="att-pick" onClick={pickFiles}>
-          Přidat soubor / fotku
-        </Button>
-      ) : (
-        <div
-          className={`drop${over ? " on" : ""}`}
-          id="drop"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) pickFiles();
-          }}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setOver(true);
-          }}
-          onDragLeave={() => setOver(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setOver(false);
-            addFiles(e.dataTransfer.files);
-          }}
-        >
-          <span className="drop-t">Přetáhněte soubory sem nebo</span>
-          <Button variant="outline" size="sm" onClick={pickFiles}>
-            Vybrat soubory
-          </Button>
-        </div>
-      )}
-      <input
-        ref={fileRef}
-        type="file"
-        id="fFile"
-        multiple
-        hidden
-        tabIndex={-1}
-        onChange={(e) => {
-          addFiles(e.target.files);
-          e.target.value = "";
+      <label
+        className={`drop${over ? " on" : ""}`}
+        id="drop"
+        onDragOver={(e) => {
+          e.preventDefault();
+          setOver(true);
         }}
-      />
+        onDragLeave={() => setOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setOver(false);
+          addFiles(e.dataTransfer.files);
+        }}
+      >
+        <input
+          type="file"
+          id="fFile"
+          multiple
+          hidden
+          onChange={(e) => {
+            addFiles(e.target.files);
+            e.target.value = "";
+          }}
+        />
+        Přetáhněte soubory sem nebo <b>vyberte ze zařízení</b>
+      </label>
       <div className="attrow">
         <input
           ref={urlRef}
@@ -200,8 +175,7 @@ export function AttachmentBox({
           type="url"
           inputMode="url"
           placeholder="https://…"
-          aria-label="Adresa odkazu"
-          autoComplete="off"
+          style={LINK_INPUT_STYLE}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
@@ -209,22 +183,10 @@ export function AttachmentBox({
             }
           }}
         />
-        <input
-          ref={labelRef}
-          id="lLabel"
-          placeholder="Popisek (nepovinné)"
-          aria-label="Popisek odkazu"
-          autoComplete="off"
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              addLink();
-            }
-          }}
-        />
-        <Button variant="outline" id="lAdd" onClick={addLink}>
+        <input ref={labelRef} id="lLabel" placeholder="Popisek (nepovinné)" style={LINK_INPUT_STYLE} />
+        <button className="btn outline" id="lAdd" type="button" onClick={addLink}>
           Přidat odkaz
-        </Button>
+        </button>
       </div>
     </div>
   );

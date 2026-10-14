@@ -10,10 +10,8 @@ import { PrintReport } from "@/features/print-report/PrintReport";
 import { TaskModal } from "@/features/tasks/TaskModal";
 import { TasksTab } from "@/features/tasks/TasksTab";
 import { TeamTab } from "@/features/team/TeamTab";
-import { useState } from "react";
-import { StoreGate, StoreProvider, usePrefs, useStore } from "@/lib/store/react";
+import { StoreGate, StoreProvider, usePrefs } from "@/lib/store/react";
 import { Header } from "./Header";
-import { Button } from "./ui";
 import { StatusLayer } from "./StatusLayer";
 import { UiProvider, useUi } from "./UiContext";
 
@@ -23,7 +21,7 @@ export function AppShell() {
       <UiProvider>
         <div className="app">
           <Header />
-          <StoreGate loading={<LoadingSkeleton />} error={(msg) => <LoadErrorCard message={msg} />}>
+          <StoreGate>
             <MainView />
           </StoreGate>
         </div>
@@ -70,68 +68,4 @@ function ModalHost() {
     case "types":
       return <PrintTypesModal key={key} onClose={closeModal} />;
   }
-}
-
-/** First load: a skeleton of the active view (filter bar + columns, or the org chart). */
-function LoadingSkeleton() {
-  const [prefs] = usePrefs();
-  const org = prefs.view === "org";
-  return (
-    <div className={`app-skel${org ? " app-skel--org" : ""}`} role="status" aria-live="polite" aria-busy="true">
-      <span className="sr-only">Načítám data…</span>
-      {org ? (
-        <div className="app-skel__org" aria-hidden="true">
-          <i className="app-skel__node app-skel__node--root" />
-          <div className="app-skel__row">
-            <i className="app-skel__node" />
-            <i className="app-skel__node" />
-            <i className="app-skel__node" />
-          </div>
-        </div>
-      ) : (
-        <>
-          <div className="app-skel__bar" aria-hidden="true">
-            <i className="app-skel__ctl app-skel__ctl--search" />
-            <i className="app-skel__ctl" />
-            <i className="app-skel__ctl app-skel__ctl--2" />
-          </div>
-          <div className="app-skel__board" aria-hidden="true">
-            {[3, 2, 1, 2].map((n, c) => (
-              <div className="app-skel__col" key={c}>
-                <i className="app-skel__head" />
-                {Array.from({ length: n }, (_, k) => (
-                  <i className="app-skel__card" key={k} />
-                ))}
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-/** Failed first load: a centred card with the reason and „Zkusit znovu" (the store also retries with backoff). */
-function LoadErrorCard({ message }: { message: string }) {
-  const store = useStore();
-  const [busy, setBusy] = useState(false);
-  const retry = () => {
-    if (busy) return;
-    setBusy(true);
-    void store.load().finally(() => setBusy(false));
-  };
-  return (
-    <div className="app-err">
-      <div className="app-err__card" role="alert">
-        <span className="app-err__ic" aria-hidden="true" />
-        <h2 className="app-err__t">Nepodařilo se načíst data.</h2>
-        {message ? <p className="app-err__msg">{message}</p> : null}
-        <p className="app-err__hint">Zkoušíme to automaticky znovu. Pokud potíže trvají, zkontrolujte připojení k internetu.</p>
-        {/* aria-busy only (not disabled), so keyboard focus stays on the button while retrying */}
-        <Button variant="primary" aria-busy={busy || undefined} onClick={retry}>
-          Zkusit znovu
-        </Button>
-      </div>
-    </div>
-  );
 }

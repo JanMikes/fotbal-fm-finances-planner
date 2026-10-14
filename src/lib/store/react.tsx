@@ -92,10 +92,23 @@ export function usePrefs(): [UiPrefs, (patch: Partial<UiPrefs>) => void] {
   return [effective, updatePrefs];
 }
 
-/** Renders children only once the state is loaded; `loading` / `error(message)` otherwise (the app shell supplies them). */
-export function StoreGate({ children, loading, error }: { children: ReactNode; loading: ReactNode; error: (msg: string) => ReactNode }) {
+/** Renders children only once the state is loaded; shows simple loading / error placeholders otherwise. */
+export function StoreGate({ children, loading, error }: { children: ReactNode; loading?: ReactNode; error?: (msg: string) => ReactNode }) {
   const snap = useStoreSnapshot();
   if (snap.state) return <>{children}</>;
-  if (snap.status === "error") return <>{error(snap.error ?? "")}</>;
-  return <>{loading}</>;
+  if (snap.status === "error") return <>{error ? error(snap.error ?? "") : <LoadError message={snap.error} />}</>;
+  return <>{loading ?? <div className="app-msg">Načítám…</div>}</>;
+}
+
+/** Failed first load: message + „Zkusit znovu" (the store also retries automatically with backoff). */
+function LoadError({ message }: { message: string | null }) {
+  const store = useStore();
+  return (
+    <div className="app-msg">
+      Nepodařilo se načíst data. {message}{" "}
+      <button type="button" className="btn outline" onClick={() => void store.load()}>
+        Zkusit znovu
+      </button>
+    </div>
+  );
 }

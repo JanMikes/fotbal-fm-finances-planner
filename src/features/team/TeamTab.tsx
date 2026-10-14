@@ -2,14 +2,8 @@
 /**
  * Tab „Struktura týmu" (prototype §10): section header, „Aktuální budget" box, root drop zone, org tree with
  * drag & drop, member / unit forms and the read-only info bubble. Mounted by the app shell; uses the store only.
- *
- * Layout: ≥ 1200 px the budget box is a sticky right column (`team.css`). The root drop zone is the first child and
- * sticks to the top of the scrolling tab while a drag is running (it takes no space when idle).
- * Clicks are delegated: „i" → info bubble, „+" → new member under the card, anywhere else on a card (incl. its name
- * button, which is the keyboard path: Enter/Space) → edit form. Events from the portalled forms and popovers bubble
- * here through the React tree too; they never match `.onode` / `data-*`, so they are ignored.
  */
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { lastColumnId } from "@/lib/filters";
 import { useActions, useAppState } from "@/lib/store/react";
 import type { OrgNode } from "@/lib/types";
@@ -19,7 +13,7 @@ import { InfoPopover } from "./InfoPopover";
 import { MemberForm } from "./MemberForm";
 import { OrgTree } from "./OrgTree";
 import { UnitForm } from "./UnitForm";
-import { horizontalScroller, useOrgDrag } from "./useOrgDrag";
+import { useOrgDrag } from "./useOrgDrag";
 import "./team.css";
 
 type ModalState = { kind: "member" | "unit"; id: string | null; parentId: string | null; seq: number } | null;
@@ -61,17 +55,6 @@ export function TeamTab() {
 
   const { view, justDragged } = useOrgDrag({ containerRef, tipRef, nodesRef, onDrop });
 
-  // a tree wider than the view opens centred (the top-level cards sit in the middle), once per mount
-  const centred = useRef(false);
-  const hasNodes = state.nodes.length > 0;
-  useLayoutEffect(() => {
-    const c = containerRef.current;
-    if (centred.current || !hasNodes || !c) return;
-    centred.current = true;
-    const sx = horizontalScroller(c);
-    if (sx.scrollWidth > sx.clientWidth) sx.scrollLeft = (sx.scrollWidth - sx.clientWidth) / 2;
-  }, [hasNodes]);
-
   // the info bubble closes on any pointerdown outside it / outside an „i" button, and on scroll of the tab
   useEffect(() => {
     if (!info) return;
@@ -93,8 +76,7 @@ export function TeamTab() {
     const t = e.target as HTMLElement;
     const ib = t.closest<HTMLElement>("[data-info]");
     if (ib?.dataset.info) {
-      const id = ib.dataset.info;
-      setInfo((cur) => (cur?.id === id ? null : { id, anchor: ib }));
+      setInfo({ id: ib.dataset.info, anchor: ib });
       return;
     }
     const plus = t.closest<HTMLElement>("[data-sub]");
@@ -103,31 +85,32 @@ export function TeamTab() {
     if (n?.dataset.uid) open(n.dataset.unit ? "unit" : "member", n.dataset.uid);
   };
 
-  const closeInfo = useCallback(() => setInfo(null), []);
+  const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
+    if (e.key !== "Enter") return;
+    const n = (e.target as HTMLElement).closest<HTMLElement>(".onode");
+    if (n?.dataset.uid && e.target === n) open(n.dataset.unit ? "unit" : "member", n.dataset.uid);
+  };
 
   const infoNode = info ? state.nodes.find((n) => n.id === info.id) : undefined;
 
   return (
-    <main className="org" id="org" ref={containerRef} onClick={onClick}>
-      <div className={"rootzone" + (view.rootOver ? " drop" : "")} id="rootZone">
-        Pusťte sem — bude na nejvyšší úrovni struktury
-      </div>
+    <main className="org" id="org" ref={containerRef} onClick={onClick} onKeyDown={onKeyDown}>
       <div className="orgh">
         <div>
           <div className="kick">Marketingový tým</div>
           <h2>Struktura týmu</h2>
         </div>
-        <div className="legend" role="group" aria-label="Vysvětlivky k barvám budgetu">
+        <div className="legend" aria-label="Vysvětlivky k barvám budgetu">
           <span className="lg-t">Budget</span>
           <span>
-            <i className="lg-red" />
+            <i style={{ background: "#c62f28" }} />
             Na dluh
           </span>
           <span>
-            <i className="lg-green" />V budgetu
+            <i style={{ background: "#1f8a4c" }} />V budgetu
           </span>
           <span>
-            <i className="lg-blue" />
+            <i style={{ background: "var(--fm-blue)" }} />
             Budoucnost
           </span>
         </div>
@@ -141,6 +124,9 @@ export function TeamTab() {
         </div>
       </div>
       <BudgetBox />
+      <div className={"rootzone" + (view.rootOver ? " drop" : "")} id="rootZone">
+        Pusťte sem — bude na nejvyšší úrovni struktury
+      </div>
       <OrgTree
         nodes={state.nodes}
         tasks={state.tasks}
@@ -148,11 +134,10 @@ export function TeamTab() {
         dragId={view.dragId}
         overId={view.overId}
         overPos={view.overPos}
-        infoId={info?.id ?? null}
       />
       {state.nodes.length === 0 && <p className="org-empty">{"Zatím tu nikdo není — začněte tlačítkem +\u00a0Přidat\u00a0člena."}</p>}
       <div id="oTip" ref={tipRef} />
-      {info && infoNode?.info && <InfoPopover name={infoNode.name} info={infoNode.info} anchor={info.anchor} onClose={closeInfo} />}
+      {info && infoNode?.info && <InfoPopover name={infoNode.name} info={infoNode.info} anchor={info.anchor} />}
       {modal?.kind === "member" && <MemberForm key={modal.seq} id={modal.id} parentId={modal.parentId} onClose={close} onOpenMember={(id) => open("member", id)} />}
       {modal?.kind === "unit" && <UnitForm key={modal.seq} id={modal.id} parentId={modal.parentId} onClose={close} />}
     </main>

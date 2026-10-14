@@ -1,18 +1,8 @@
 "use client";
-/**
- * Print item modal „Tiskovina" / „Nová tiskovina" (prototype §8, print mode). Same behaviour as the task modal:
- * Ctrl/Cmd+Enter saves, a new item focuses Název (desktop), inline title error, PATCH of the changed fields only.
- * Počet / Cena are whole numbers (`number | null`, formatted „4 500" by MoneyInput).
- */
+/** Print item modal „Tiskovina" / „Nová tiskovina" (prototype §8, print mode). */
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/Button";
-import { DateInput } from "@/components/ui/DateInput";
-import { Field, fieldA11y } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
-import { MoneyInput } from "@/components/ui/MoneyInput";
-import { Select } from "@/components/ui/Select";
 import { DELETED_NOTICE, useCloseWhenDeleted } from "@/components/ui/useCloseWhenDeleted";
-import { useToday } from "@/components/ui/useToday";
 import {
   AttachmentBox,
   applyAttachmentDraft,
@@ -25,10 +15,9 @@ import {
 import { uuid } from "@/lib/api";
 import { ALL } from "@/lib/constants";
 import { columnsOf } from "@/lib/filters";
-import { formatDateWithRelative } from "@/lib/dates";
+import { formatDate, parseDigits } from "@/lib/format";
 import { changedFields, isEmptyPatch } from "@/lib/patch";
 import { useActions, useAppState, usePrefs, useStore } from "@/lib/store/react";
-import "./print.css";
 
 type PrintForm = {
   typeId: string;
@@ -36,12 +25,10 @@ type PrintForm = {
   title: string;
   realizationDate: string;
   description: string;
-  quantity: number | null;
-  price: number | null;
+  quantity: string;
+  price: string;
   paid: boolean;
 };
-
-const TITLE_REQUIRED = "Vyplňte název tiskoviny";
 
 /** Form values → API fields (shared by the save payload and the „unchanged" baseline). */
 function printFields(f: PrintForm) {
@@ -51,8 +38,8 @@ function printFields(f: PrintForm) {
     title: f.title.trim(),
     description: f.description.trim(),
     realizationDate: f.realizationDate || null,
-    quantity: f.quantity,
-    price: f.price,
+    quantity: parseDigits(f.quantity),
+    price: parseDigits(f.price),
     paidByClub: f.paid,
   };
 }
@@ -72,7 +59,6 @@ export function PrintModal({
   const [prefs] = usePrefs();
   const actions = useActions();
   const store = useStore();
-  const today = useToday();
   const cols = columnsOf(state.columns, "print");
   const types = [...state.printTypes].sort((a, b) => a.sortOrder - b.sortOrder);
 
@@ -88,20 +74,23 @@ export function PrintModal({
       title: t?.title ?? "",
       realizationDate: t?.realizationDate ?? "",
       description: t?.description ?? "",
-      quantity: t?.quantity ?? null,
-      price: t?.price ?? null,
+      quantity: t?.quantity != null ? String(t.quantity) : "",
+      price: t?.price != null ? String(t.price) : "",
       paid: t?.paidByClub ?? false,
     };
   });
   const [f, setF] = useState(init);
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((p) => ({ ...p, [k]: v }));
   const [draft, setDraft] = useState<AttachmentDraft>(emptyDraft);
-  const [titleErr, setTitleErr] = useState<string | null>(null);
+  const [titleErr, setTitleErr] = useState(false);
   const [busy, setBusy] = useState(false);
-  /** The date field holds text that is not a date („Datum nerozpoznáno") — saving is blocked until it is fixed. */
-  const [dateBad, setDateBad] = useState(false);
-  const [dupBusy, setDupBusy] = useState(false);
   const titleRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (id) return;
+    const t = setTimeout(() => titleRef.current?.focus(), 30);
+    return () => clearTimeout(t);
+  }, [id]);
 
   // deleted elsewhere while open → close with a notice (instead of turning into a „new" form)
   useCloseWhenDeleted(!!currentId && !ex, onClose);
@@ -119,15 +108,10 @@ export function PrintModal({
   const creator = ex?.createdBy ? state.nodes.find((n) => n.id === ex.createdBy && n.kind === "person") : undefined;
 
   const save = async () => {
-    if (busy) return;
     const title = f.title.trim();
     if (!title) {
-      setTitleErr(TITLE_REQUIRED);
+      setTitleErr(true);
       titleRef.current?.focus();
-      return;
-    }
-    if (dateBad) {
-      document.getElementById("fDue")?.focus(); // its hint says „Datum nerozpoznáno"
       return;
     }
     const fields = printFields(f);
@@ -162,15 +146,13 @@ export function PrintModal({
   };
 
   const duplicate = async () => {
-    if (!ex || dupBusy) return;
-    setDupBusy(true);
+    if (!ex) return;
     try {
       const res = await actions.duplicatePrintItem(ex.id, prefs.me);
       onOpenItem(res.printItem.id);
     } catch {
       /* toast */
     }
-    if (mounted.current) setDupBusy(false);
   };
 
   const remove = () => {
@@ -184,96 +166,97 @@ export function PrintModal({
       title={ex ? "Tiskovina" : "Nová tiskovina"}
       onClose={onClose}
       testId="print-modal"
-      onSubmit={save}
-      initialFocus={id ? undefined : "#fTitle"}
-      meta={ex && creator ? `Založil(a) ${creator.name} · ${formatDateWithRelative(ex.createdAt, today)}` : undefined}
-      footStart={
-        ex ? (
-          <>
-            <Button variant="danger" id="del" className="mf-ic mf-ic--del" onClick={remove}>
-              Smazat
-            </Button>
-            <Button variant="outline" id="dup" className="mf-ic mf-ic--dup" busy={dupBusy} onClick={duplicate}>
-              Duplikovat
-            </Button>
-          </>
-        ) : undefined
-      }
       foot={
         <>
-          <Button variant="outline" data-close2="" onClick={onClose}>
+          <span className="meta">{ex && creator ? `Založil(a) ${creator.name}, ${formatDate(ex.createdAt)}` : ""}</span>
+          {ex && (
+            <>
+              <button className="btn danger" id="del" type="button" onClick={remove}>
+                Smazat
+              </button>
+              <button className="btn outline" id="dup" type="button" onClick={duplicate}>
+                Duplikovat
+              </button>
+            </>
+          )}
+          <button className="btn outline" data-close2="" type="button" onClick={onClose}>
             Zrušit
-          </Button>
-          <Button variant="primary" id="ok" busy={busy} onClick={save}>
+          </button>
+          <button className="btn primary" id="ok" type="button" disabled={busy} onClick={save}>
             {ex ? "Uložit" : "Přidat tiskovinu"}
-          </Button>
+          </button>
         </>
       }
     >
       <div className="mb">
-        <Field label="Typ média" htmlFor="fCat">
-          <Select id="fCat" value={f.typeId} onChange={(v) => set("typeId", v)} options={types.map((t) => ({ value: t.id, label: t.name }))} />
-        </Field>
-        <Field label="Stav" htmlFor="fCol">
-          <Select id="fCol" value={f.columnId} onChange={(v) => set("columnId", v)} options={cols.map((c) => ({ value: c.id, label: c.title }))} />
-        </Field>
-        <Field label="Název" htmlFor="fTitle" required error={titleErr}>
+        <div className="f">
+          <label htmlFor="fCat">Typ média</label>
+          <select id="fCat" value={f.typeId} onChange={(e) => set("typeId", e.target.value)}>
+            {types.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="f">
+          <label htmlFor="fCol">Stav</label>
+          <select id="fCol" value={f.columnId} onChange={(e) => set("columnId", e.target.value)}>
+            {cols.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.title}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="f">
+          <label htmlFor="fTitle">
+            Název <span className="req">*</span>
+          </label>
           <input
             ref={titleRef}
             id="fTitle"
             value={f.title}
             placeholder="Např. Letáky na nábor, 500 ks"
-            autoComplete="off"
-            {...fieldA11y("fTitle", { error: titleErr, required: true })}
-            onChange={(e) => {
-              set("title", e.target.value);
-              if (titleErr && e.target.value.trim()) setTitleErr(null);
-            }}
+            style={titleErr ? { borderColor: "#b3261e" } : undefined}
+            onChange={(e) => set("title", e.target.value)}
           />
-        </Field>
-        <Field label="Datum realizace" htmlFor="fDue">
-          <DateInput id="fDue" value={f.realizationDate} onChange={(v) => set("realizationDate", v)} onValidityChange={(ok) => setDateBad(!ok)} />
-        </Field>
-        <Field label="Popis" htmlFor="fDesc" wide>
+        </div>
+        <div className="f">
+          <label htmlFor="fDue">Datum realizace</label>
+          <input id="fDue" type="date" value={f.realizationDate} onChange={(e) => set("realizationDate", e.target.value)} />
+        </div>
+        <div className="f w">
+          <label htmlFor="fDesc">Popis</label>
           <textarea id="fDesc" placeholder="Co je potřeba udělat, termíny, formáty…" value={f.description} onChange={(e) => set("description", e.target.value)} />
-        </Field>
-        <Field
-          label={
-            <>
-              Počet<span className="sr-only"> kusů</span>
-            </>
-          }
-          htmlFor="fQty"
-        >
-          <MoneyInput id="fQty" value={f.quantity} onChange={(n) => set("quantity", n)} suffix="ks" placeholder="Např. 500" />
-        </Field>
-        <Field
-          label={
-            <>
-              Cena<span className="sr-only"> v Kč</span>
-            </>
-          }
-          htmlFor="fPrice"
-        >
-          <MoneyInput id="fPrice" value={f.price} onChange={(n) => set("price", n)} suffix="Kč" placeholder="Např. 4 500" />
-        </Field>
-        <Field label="Zaplaceno FK FM" group>
-          <div className="budc paidc">
+        </div>
+        <div className="f">
+          <label htmlFor="fQty">Počet ks</label>
+          <input id="fQty" inputMode="numeric" value={f.quantity} placeholder="Např. 500" onChange={(e) => set("quantity", e.target.value)} />
+        </div>
+        <div className="f">
+          <label htmlFor="fPrice">Cena (Kč)</label>
+          <input id="fPrice" inputMode="numeric" value={f.price} placeholder="Např. 4 500" onChange={(e) => set("price", e.target.value)} />
+        </div>
+        <div className="f">
+          <span className="lbl">Zaplaceno FK FM</span>
+          <div className="budc">
             <label>
               <input type="radio" name="fPaid" value="ano" checked={f.paid} onChange={() => set("paid", true)} />
-              <i className="paidc-dot is-yes" aria-hidden="true" />
+              <i style={{ background: "#1f8a4c" }} />
               Ano
             </label>
             <label>
               <input type="radio" name="fPaid" value="ne" checked={!f.paid} onChange={() => set("paid", false)} />
-              <i className="paidc-dot is-no" aria-hidden="true" />
+              <i style={{ background: "#c62f28" }} />
               Ne
             </label>
           </div>
-        </Field>
-        <Field label="Přílohy a odkazy" wide group>
+        </div>
+        <div className="f w">
+          <span className="lbl">Přílohy a odkazy</span>
           <AttachmentBox existing={attachmentsOf(state.attachments, "print", currentId)} draft={draft} onChange={setDraft} />
-        </Field>
+        </div>
       </div>
     </Modal>
   );

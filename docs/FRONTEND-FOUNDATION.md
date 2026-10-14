@@ -15,10 +15,9 @@ change an API contract, update `docs/API.md` and the integration tests.
 
 ## Styling
 
-- Global CSS = `src/styles/globals.css` → design tokens (`src/styles/fm/tokens/*`) + **prototype CSS verbatim,
-  frozen** (`src/styles/fm/prototype-app.css`) + `src/styles/app-extra.css` (login page — its only stylesheet) +
-  `src/styles/app-ux.css` (UX-round tokens and global overrides, last). Primitive styles: `src/components/ui/ui.css`
-  (imported in `layout.tsx` after `components.css`). See „UI primitives" below. Use the prototype class names exactly (`.top`, `.tabs`, `.bar`, `.board`, `.col`, `.card`, `.ov`,
+- Global CSS = `src/styles/globals.css` → design tokens (`src/styles/fm/tokens/*`) + **prototype CSS verbatim**
+  (`src/styles/fm/prototype-app.css`) + `src/styles/app-extra.css` (login page, `.app-msg`; put new non-prototype
+  rules here). Use the prototype class names exactly (`.top`, `.tabs`, `.bar`, `.board`, `.col`, `.card`, `.ov`,
   `.modal`, `.onode`, `.tree`, `.curbud`, `.yv`, …). No Tailwind / UI libraries.
 - Fonts: Montserrat 400–900 from `public/fonts` (`@font-face` in `tokens/fonts.css`). Logo: `/logo-short.svg`.
 - The dead/legacy selectors from prototype.md §18 have been removed from `prototype-app.css` (DECISIONS #10: do not
@@ -29,13 +28,12 @@ change an API contract, update `docs/API.md` and the integration tests.
 | Module | Purpose |
 |---|---|
 | `src/lib/types.ts` | Domain types = API JSON (`OrgNode`, `BoardColumn`, `Task`, `PrintType`, `PrintItem`, `PrintYearClosure`, `Attachment`, `Budget`, `AppState`, `ChangeEvent`). |
-| `src/lib/constants.ts` | `GROUPS`, `GROUP_FILTERS`, `CATS`, `CATEGORY_OPTGROUPS`, `AREAS`, `UNIT_NAME_SUGGESTIONS`, `AVC`, `AVPAL`, `colorName(hex)` (Czech names for swatch `aria-label`s), `DEFAULT_UNIT_COLOR`, `MNAMES` (capitalised `CS_MONTHS` — dates.ts holds the one month-name table), `MONTH_ABBR` (Čvn/Čvc), `BUDGET_COLORS`, `MAX_UPLOAD_BYTES`, `ALL` (= "Vše"). |
-| `src/lib/dates.ts` | Czech dates, pure and `Intl`-free: `parseIsoDate`, `toIsoDate`, `addDays`, `addMonths`, `addMonthsToDate`, `diffDays` (DST-safe), `formatDate` (`13. 10. 2026`, NBSP), `formatDayMonth`, `formatDateShort` (year only when ≠ current), `formatDateInput` (`út 3. 11. 2026`), `formatDateLong` (`úterý 3. listopadu 2026`), `formatRelativeDay` (`dnes`, `zítra`, `včera`, `za 3 dny`, `za 5 dní`, `před 2 dny`), `formatDateWithRelative` (suffix within ±6 days), `formatMonth` (`Říjen 2026`), `monthGrid` (6×7, Monday first), `weekStart`, `capitalize`, `plural`, `fold` (lowercase, no diacritics), `NBSP`, `parseCzDate` (`1.2.2026`, `1. 2.`, `1/2/26`, `3. listopadu`, ISO, `dnes`/`zítra`/`pozítří`/`včera`, `+3`/`-2`, leading weekday ignored; implicit year = this year, next year if > 60 days past; `{requireYear}` = only input that cannot grow into another date: 4-digit year, full ISO, keywords — used while typing), `parseCzMonth` (`2026-10`, `10/2026`, `říjen 2026`, `rijen 2026`; `{requireYear}` also needs a 2-digit ISO month), `CS_MONTHS`, `CS_MONTHS_GENITIVE`, `CS_WEEKDAYS`, `CS_WEEKDAYS_SHORT`. |
-| `src/lib/format.ts` | `nf`, `kcs` (`25 000 Kč` with U+00A0 as thousands separator and before the unit, so amounts never wrap; `NBSP` re-exported from dates.ts), `parseDigits` / `parseDigitsOrZero` (a trailing decimal part `,`/`.` + 1–2 digits is ignored — „4 500,50" → 4500 — then `replace(/\D/g,'')`), `cbFmt`, `signedKc` (U+2212), `fmtSize`, `ini`, `thousandsLabel` (`4,5 tis.`), `qtyLabel`, `formatDate` / `formatDayMonth` / `parseIsoDate` / `plural` (re-exported from `dates.ts`), `pluralize(n, one, few, many)` (`3 položky`), `monthKey`, `monLab` (= `formatMonth`), `normalizeUrl`. |
-| `src/lib/due.ts` | `dueInfo(due, inLastColumn, now?, titlePrefix?)` → `{cls: ""\|"soon"\|"late"\|"done", state, date, text, title, srText, diff}`; the chip always shows the date (`formatDateShort`) and, before it, a visible `state`: „Po termínu" when overdue, „Dnes" / „Zítra" / „Za 3 dny" within 6 days (`text` = „Po termínu · 23. 9.", „Za 2 dny · 15. 10.", „20. 10."); last column: date only; `title`/`srText` = prefix + date + „ — po termínu (včera)" / „ — za 3 dny". Pass `useToday()` as `now`. |
+| `src/lib/constants.ts` | `GROUPS`, `GROUP_FILTERS`, `CATS`, `CATEGORY_OPTGROUPS`, `AREAS`, `UNIT_NAME_SUGGESTIONS`, `AVC`, `AVPAL`, `LIGHT`, `DEFAULT_UNIT_COLOR`, `MNAMES`, `MONTH_ABBR` (Čvn/Čvc), `BUDGET_COLORS`, `MAX_UPLOAD_BYTES`, `ALL` (= "Vše"). |
+| `src/lib/format.ts` | `nf`, `kcs` (`25 000 Kč` with U+00A0 as thousands separator and before the unit, so amounts never wrap; `NBSP`), `parseDigits` / `parseDigitsOrZero` (a trailing decimal part `,`/`.` + 1–2 digits is ignored — „4 500,50" → 4500 — then `replace(/\D/g,'')`), `cbFmt`, `signedKc` (U+2212), `fmtSize`, `ini`, `thousandsLabel` (`4,5 tis.`), `qtyLabel`, `formatDate` (`13. 10. 2026`), `formatDayMonth` (`13. 10.`), `monthKey`, `monLab` (`Říjen 2026`), `normalizeUrl`. |
+| `src/lib/due.ts` | `dueInfo(due, inLastColumn, now?, titlePrefix?)` → `{cls: ""\|"soon"\|"late"\|"done", text: "Dnes"\|"Zítra"\|"d. m.", title, diff}`. |
 | `src/lib/filters.ts` | `columnsOf`, `lastColumnId`, `itemsInColumn`, `inGroup`, `taskVisible`, `groupCounts`, `taskMonthOptions` (−1…+11 + due months, counts by group), `printVisible`, `printTypeOptions`, `printMonthOptions` (−2…+5, Kč sums; both month lists always include the currently selected month), `sumPrices`, `printTotalLabel`, `defaultTaskCategory`. Archived print items are excluded from all board counts/sums (DECISIONS #9). |
 | `src/lib/budget.ts` | `monthsSince`, `computeBudget(budget, nodes, now?)` → `{total, green, installments, left, months}`. |
-| `src/lib/tree.ts` | `personsInOrder` (identity order), `rootsOf`, `childrenOf`, `descendantsOf`, `peopleCount` (persons only, DECISIONS #3), `unitTaskCount` (null when the unit name matches no category/group), `personStats` („řeší"/„vede"), `assignedTaskCount`, `parentOptions` (Nadřízený select), `colorOf` (AVC fallback), `contrastRatio`, `inkOn(color)` → `{background, ink}` (white or navy text, whichever reaches 4.5:1; a colour where neither does — the palette green — gets a slightly deeper background), `isLightColor` (= navy ink), `buildTree`. |
+| `src/lib/tree.ts` | `personsInOrder` (identity order), `rootsOf`, `childrenOf`, `descendantsOf`, `peopleCount` (persons only, DECISIONS #3), `unitTaskCount` (null when the unit name matches no category/group), `personStats` („řeší"/„vede"), `assignedTaskCount`, `parentOptions` (Nadřízený select), `colorOf` (AVC fallback), `isLightColor`, `buildTree`. |
 | `src/lib/report.ts` | `buildYearReport({items, types, closures, year, now?})` — same data as `GET /api/print/years/:y/report`. |
 | `src/lib/sortOrder.ts` | `between`, `planInsert`, `appendOrder`, `MIN_GAP` (shared with the server). |
 | `src/lib/api.ts` | Typed same-origin fetch client `api.*`, `ApiError`, `CLIENT_ID` (per tab, sent as `X-Client-Id`), `uuid()`. Every non-GET request is `Content-Type: application/json` (except multipart uploads). A 401 redirects to `/login`. Only the app's own JSON errors (`{error, message}`) reach the UI; proxy pages („Bad Gateway", HTML) become a Czech generic message. |
@@ -45,7 +43,7 @@ change an API contract, update `docs/API.md` and the integration tests.
 | `src/lib/store/optimistic.ts` | Pure optimistic transitions mirroring the server rules (move, duplicate, delete column/type/node, close year …). |
 | `src/lib/store/actions.ts` | `createActions(store)` — the mutations the UI calls. |
 | `src/lib/store/realtime.ts` | SSE client with reconnect/backoff + auth probe; every `hello` (incl. the first) and `resync` triggers a full refetch. |
-| `src/lib/store/react.tsx` | `StoreProvider`, `StoreGate` (required `loading` node + `error(message)` renderer — the shell passes the skeleton and the retry card), `useAppState`, `useStoreSnapshot`, `useActions`, `usePrefs`, `useStore`. |
+| `src/lib/store/react.tsx` | `StoreProvider`, `StoreGate`, `useAppState`, `useStoreSnapshot`, `useActions`, `usePrefs`, `useStore`. |
 
 ## Using the store
 
@@ -76,18 +74,9 @@ Rules of the store:
   need the result (e.g. open the duplicated task) and `catch` to keep the modal open.
 - After mutations settle, the store refetches `/api/state` to reconcile. Realtime events from other tabs/users
   trigger a debounced refetch, deferred while local mutations are pending; a response whose request started before
-  the latest mutation is discarded (and fetched again). A refetch requested while a load is in flight never aborts
-  it (a slow first load would starve under steady realtime traffic); it runs once more right after it (a load older
-  than 10 s is replaced). Failed loads are retried with backoff (1 s → 30 s) and on
+  the latest mutation is discarded (and fetched again). Failed loads are retried with backoff (1 s → 30 s) and on
   the `online` event; while they fail `snapshot.stale` is true (the „Offline" pill shows) — background failures are
   not toasted. You never need to patch state manually.
-- **Request ordering (per entity):** every request becomes the tail of the entity it targets (`creates`, else the
-  first id in `after`); any later action that targets or references that id (rename / move / delete / update, a task
-  in a just-created column, an upload to a just-created task, a second move of the same card, …) keeps its optimistic
-  change but sends its request only after the earlier one has settled (`mutate(…, {creates, after})`), so a quick
-  rename after „Přidat sloupec" can't 404 and two quick moves of a card reach the server in click order. A failed
-  request releases the queue (the next one runs and reports its own error); requests on other entities are not
-  delayed. New actions must pass these deps too (target id first).
 - **IDs are generated client-side** (`uuid()`), so a new entity has its final id immediately. Duplicate actions
   return the server payload; e.g. `const { task } = await actions.duplicateTask(id, prefs.me)` → open `task.id`.
 - `duplicateNode` for a **unit** has no optimistic step (recursive copy is server-side); it resolves with
@@ -127,8 +116,8 @@ server-side too (`https://` prefix), but use `normalizeUrl` for the immediate UI
   use `useSyncExternalStore` with defaults on the server.
 - **Numbers** in inputs accept any text; convert with `parseDigits` (→ `number | null`) before calling actions.
   Display with `kcs`, `cbFmt` (budget inputs, formatted on blur only), `qtyLabel`.
-- **Dates**: `"YYYY-MM-DD"` in state; edit with `DateInput` / `MonthInput`; display with `dates.ts` / `dueInfo`
-  (never `toLocaleDateString`).
+- **Dates**: `"YYYY-MM-DD"` in state; `<input type="date">` values map 1:1; display with `formatDate` /
+  `dueInfo`.
 - **Ordering**: always sort with `sortOrder` (`itemsInColumn`, `childrenOf`). Never rely on array order from the
   API.
 - **Last column** („done") = `lastColumnId(state.columns, board)`.
@@ -146,9 +135,9 @@ server-side too (`https://` prefix), but use `normalizeUrl` for the immediate UI
 | `src/components/UiContext.tsx` | `useUi()` → `modal` + `openTask(id \| null, columnId?)`, `openPrint(…)`, `openTypes()`, `closeModal()`, `reportOpen` / `setReportOpen`. One modal at a time (prototype `#modalRoot`). |
 | `src/components/Header.tsx` | Tabs (switching closes the report), identity select, „+ Nový úkol" / „+ Nová tiskovina" (org tab → jumps to Úkoly). Publishes the header bottom as CSS var `--fm-top-h`. |
 | `src/components/StatusLayer.tsx` | Error toast for `snapshot.error` (6 s), subtle „Offline" pill after 4 s without SSE or while refetches fail, silent refetch on `visibilitychange`. |
-| `src/components/ui/Modal.tsx` | Prototype modal shell (`.ov > .modal > .mh + body + .mf`), see „UI primitives". Render it from `ModalHost` (inside `#modalRoot`), or pass `portal` to portal it there (team forms). |
+| `src/components/ui/Modal.tsx` | Prototype modal shell (`.ov > .modal > .mh + body + .mf`): Esc, pointerdown on overlay, × close. Render it from `ModalHost` (inside `#modalRoot`), or pass `portal` to portal it there (team forms). |
 | `src/components/ui/useCloseWhenDeleted.ts` | Edit modals (task, print item, member, unit): when the entity is deleted elsewhere, close with the toast „Položka byla smazána jiným uživatelem." |
-| `src/components/ui/Avatar.tsx` | `.av` circle (`lead` ring, „–" when unassigned, tooltip „Vedoucí/Zodpovědný: …", `role="img"` named by the tooltip, initials white or navy via `inkOn`). `label="…"` overrides name + tooltip; `label={false}` = decorative (`aria-hidden`, e.g. org cards next to the name). |
+| `src/components/ui/Avatar.tsx` | `.av` circle (`lead` ring, „–" when unassigned, tooltip „Vedoucí/Zodpovědný: …"). |
 | `src/components/components.css` | Non-prototype CSS for the shell (report host, toast, offline pill); imported in `layout.tsx`. |
 | `src/features/board/Board.tsx` | Generic kanban (`mode: "tasks" \| "print"`, `visible` map, `renderCard`, `columnExtra`, optional `columnEditing`). Prototype DOM/classes. |
 | `src/features/board/useBoardDnd.ts` | Pointer-event drag & drop (prototype §7.7): mouse > 5 px, touch hold 220 ms + `vibrate(15)`, live placeholder `.ph` (a separate element — the original card stays mounted, hidden with `data-dragsrc`, so a touch drag survives crossing columns), ghost portal `body > .card.ghost`, `.col.over`, autoscroll (`body.dragging` disables the mobile scroll-snap), `pointercancel` reverts, `onDrop(id, columnId, beforeIdOfNextVisible)`, click swallowed 50 ms after a drag. |
@@ -159,43 +148,6 @@ server-side too (`https://` prefix), but use `normalizeUrl` for the immediate UI
 The yearly report (`PrintReport`) is rendered inside `#modalRoot > .report-host` (fixed below the header, `transform`
 makes it the containing block of `.yv`); the Tiskoviny bar/board are not rendered while it is open.
 Local parallel dev servers: `NEXT_DIST_DIR=.next/<name> next dev -p <port>` (optional `distDir` override in `next.config.ts`).
-
-## UI primitives (UX round)
-
-Import from `@/components/ui`. Live catalogue: **`/ui-lab`** (unlinked, behind the login like every route,
-`noindex`); `tests/e2e/ui-primitives.spec.ts` runs against it. Primitives portal their layers to `<body>` and never
-use `data-sub` / `data-info` / `data-close` / `data-id` / `.onode` (React events still bubble to TeamTab).
-
-| Primitive | Use |
-|---|---|
-| `Select` | `<label htmlFor="fCat">…</label><Select id="fCat" value onChange options={[opt \| {label, options}]} />`. Option `{value, label, meta?, disabled?, keywords?}`. `variant="field"` (44px) \| `"filter"` (40px, 600, min 180) \| `"onDark"`; `searchable` (default `"auto"` = ≥ 10 options); `placeholder`, `renderValue`, `invalid`, `aria-*`. Trigger `button#id.fm-select[role=combobox][data-value]`; popup `#{id}-listbox [role=option][data-value]`. APG keys (see file header); fine pointer → popover (flips up), coarse → bottom sheet. Tests: `pick`, `pickByText`, `expectValue`, `optionTexts`, `optionText` in `tests/e2e/ui-helpers.ts`. |
-| `DateInput` | `<DateInput id="fDue" value={iso\|""} onChange onValidityChange />` (+ `min`, `max`, `invalid`, `showRelative`). Text input `#id[data-value]`: typing commits only complete dates (4-digit year, ISO, „dnes"/„zítra" — `fill("2026-11-20")` works); blur / Enter / Ctrl+Enter also accept „1. 2.", „1.2.26", „+3" and normalise („út 3. 11. 2026"). Unparseable text says „Datum nerozpoznáno" (`#id-rel`): with `onValidityChange` the text stays, `aria-invalid`, and the form blocks its save (Task/Print modal: Uložit and Ctrl+Enter focus the field instead); without it the text reverts. Ctrl+Enter in the field commits it first (`flushSync`, the Modal reads `onSubmit` from a layout effect). Hint „za 5 dní" / „v minulosti". Shared logic: `usePickerField` (also MonthInput). Calendar button `.fm-date__btn` / Alt+↓; quick picks Dnes / Zítra / Za týden / Vymazat. Coarse pointer: read-only input, tap → sheet. Tests: `setDate(input, text)`. |
-| `MonthInput` | `<MonthInput id="cbFrom" value={ym\|""} onChange compact placeholder="od měsíce…" />`. Typing commits only full months with a 4-digit year (`2026-10`, never `2026-1`); blur/Enter also accept a bare month name; error in `#id-msg`. `.fm-month`, `#id[data-value]`. Tests: `fill("2026-10")` or `pickMonth(page, "#cbFrom", "2026-10")`. |
-| `MoneyInput` | `<MoneyInput id="fPrice" value={n\|null} onChange suffix="Kč" />` (+ `zeroAsEmpty`, `compact`, `onBlur`, `onFocus`). `.fm-money > input.fm-money__input[inputmode=numeric] + .fm-money__sfx`. Mirrors the prop until the user types (realtime values are never overwritten by a mere focus / blur — `onChange` only fires for typed input); letters are dropped while typing; `parseDigits` on every keystroke, NBSP thousands on blur („4 500"). |
-| `Field` + `fieldA11y` | `<Field label htmlFor required hint error wide group>` → `.f[.w]` > label (`.req` „*") → control → `p.f-hint#{id}-hint` → `p.f-err#{id}-err[role=alert]`; `group` = `fieldset.f > legend.lbl` for radio/checkbox sets. Spread `fieldA11y(id, {hint, error, required})` on the control (`aria-describedby`, `aria-invalid`, `aria-required`). Invalid border stays `#b3261e`. |
-| `Button` | `<Button variant="primary\|outline\|ghost\|danger" size="sm" icon block busy>` → `.btn.{variant}[.sm][.icon][.block]`, `type="button"` by default; `busy` = disabled + `aria-busy` spinner (label unchanged). Plain `<button className="btn outline">` gets the same styles. |
-| `Modal` | `<Modal title onClose foot={end buttons} footStart={Smazat, Duplikovat} meta="Založil(a) …" onSubmit={save} initialFocus="#fTitle" testId portal size>`. `aria-labelledby` → `.mh h2`; initial focus (skipped on coarse pointers) or the dialog; focus trap (body layers `[data-fm-layer]` and `.app-toast` allowed); focus restore to the opener; Esc and Ctrl/Cmd+Enter on `window`, ignored when `defaultPrevented` (Escape contract) and only for the topmost modal; overlay pointerdown that just dismissed a popover does not close. Footer `.mf > span.meta + .mf-start + .mf-end`; desktop centred with a scrolling `.mb`, ≤ 760px full screen with a ≤ 2-row footer (meta, then Smazat / Duplikovat as 44px icon buttons — give them `className="mf-ic mf-ic--del|--dup"` — next to Zrušit / Uložit). A modal opened from inside another one („Duplikovat") returns focus to the first modal's opener. A legacy `foot` with `span.meta` + all buttons still renders as before. |
-| `Popover` | Low-level anchored layer / bottom sheet (`anchor` ref, `open`, `onClose(reason)`, `label`, `sheet?`, `matchWidth?`, `placement?`, `role?`, `trapFocus?`). Escape contract: a layer that handles Esc calls `preventDefault()` + `stopPropagation()`; window-level Esc listeners must ignore `defaultPrevented`. |
-| `Calendar` | The month grid used by DateInput (standalone use possible). |
-| `useToday()` | Local midnight of today; one shared timer to the next midnight + `visibilitychange`. Feed it to `dueInfo` / date displays so chips refresh at midnight. |
-| `useCoarsePointer()` / `isCoarsePointer()` | `(pointer: coarse)` media query. |
-
-CSS tokens (`app-ux.css`): `--c-ok`, `--c-ok-bg`, `--c-danger`, `--c-danger-ink` (#b3261e), `--c-danger-bg`,
-`--c-danger-line`, `--c-warn`, `--c-warn-bg`, `--c-warn-ink`, `--control-h` (44px), `--control-h-compact` (40px),
-`--control-fs` (15px; 16px in modals and sheets on touch), `--z-toast` 300, `--z-layer` 400, `--focus-ring-danger`, `--focus-ring-dark`,
-`--c-blue-strong` (#0079ab: `.btn.primary:hover` and the AVC fallback blue, white text 4.86:1 — DS `--blue-500` is
-4.47:1), `--ic-search` (magnifier data URI); `--c-ok` is #1a7a42 (white text / text on white 5.4:1; the prototype's #1f8a4c is 4.38:1 and is overridden
-where it is text). Decorative CSS glyphs (✓ marks, the `.f-err` „!") use alt text `content:"✓" / ""` so they stay
-out of accessible names. Utility `.sr-only`. Global pass: `:focus-visible` ring (light on navy surfaces), field focus = blue border +
-`--focus-ring`, `.budc`/`.avpick`/`.chkgrid` inputs visually hidden but focusable (ring via `:has(:focus-visible)`,
-checked = tint/fill + ✓), grey-600 minimum for small text, 11px minimum labels, `(pointer: coarse)` 44px minimums (filter selects,
-swatches, Oblasti chips) and 16px text in every modal / sheet field (no iOS zoom; `--control-fs: 16px` there),
-hover looks only under `(hover: hover)` (prototype hovers reset under `(hover: none)`), 3px corners on chips and
-quick picks (sheets 6px), `prefers-reduced-motion`. axe in e2e: `expectNoA11yViolations(page, {include, exclude, disableRules})` waits for
-animations and allowlists only the white-on-`--fm-blue` brand trade-off. `tests/e2e/a11y.spec.ts` is the overview:
-whole-page scans of login, Úkoly (board, open Select, task modal new/existing, calendar), Tiskoviny (board, item
-modal, Typy médií, yearly report) and Struktura týmu (org chart, member form new/existing, unit form) at
-1440×900 and 390×844 touch; feature specs keep scoped scans of special states.
 
 ## Known gaps / TODO for Phase 2
 
