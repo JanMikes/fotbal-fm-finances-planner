@@ -73,6 +73,7 @@ export const tasks = pgTable(
       .notNull()
       .references(() => boardColumns.id, { onDelete: "restrict" }),
     category: text("category").notNull(),
+    subcategories: text("subcategories").array().notNull().default(sql`'{}'::text[]`),
     title: text("title").notNull(),
     description: text("description").notNull().default(""),
     leadId: uuid("lead_id").references(() => orgNodes.id, { onDelete: "set null" }),

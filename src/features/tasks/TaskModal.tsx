@@ -20,12 +20,13 @@ import { changedFields, isEmptyPatch } from "@/lib/patch";
 import { useActions, useAppState, usePrefs, useStore } from "@/lib/store/react";
 import { personsInOrder } from "@/lib/tree";
 
-type TaskForm = { category: string; columnId: string; title: string; dueDate: string; description: string; leadId: string; ownerId: string };
+type TaskForm = { category: string; subcategories: string[]; columnId: string; title: string; dueDate: string; description: string; leadId: string; ownerId: string };
 
 /** Form values → API fields (shared by the save payload and the „unchanged" baseline). */
 function taskFields(f: TaskForm) {
   return {
     category: f.category,
+    subcategories: f.subcategories.filter((c) => c !== f.category),
     columnId: f.columnId,
     title: f.title.trim(),
     description: f.description.trim(),
@@ -63,6 +64,7 @@ export function TaskModal({
     const cat = t ? t.category : defaultTaskCategory(prefs.filter);
     return {
       category: CATS.includes(cat) ? cat : CATEGORY_OPTGROUPS[0].options[0],
+      subcategories: t?.subcategories ?? [],
       columnId: t?.columnId ?? (columnId && cols.some((c) => c.id === columnId) ? columnId : cols[0]?.id ?? ""),
       title: t?.title ?? "",
       dueDate: t?.dueDate ?? "",
@@ -201,6 +203,37 @@ export function TaskModal({
               <option key={c.id} value={c.id}>
                 {c.title}
               </option>
+            ))}
+          </select>
+        </div>
+        <div className="f w">
+          <label htmlFor="fSub">Podkategorie</label>
+          {f.subcategories.length > 0 && (
+            <div className="subcats">
+              {f.subcategories.map((c) => (
+                <span key={c} className="subcat">
+                  {c}
+                  <button type="button" aria-label={`Odebrat podkategorii ${c}`} onClick={() => set("subcategories", f.subcategories.filter((x) => x !== c))}>
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <select
+            id="fSub"
+            value=""
+            onChange={(e) => e.target.value && set("subcategories", [...f.subcategories, e.target.value])}
+          >
+            <option value="">+ Přidat podkategorii</option>
+            {CATEGORY_OPTGROUPS.map((g) => (
+              <optgroup key={g.label} label={g.label}>
+                {g.options
+                  .filter((c) => c !== f.category && !f.subcategories.includes(c))
+                  .map((c) => (
+                    <option key={c}>{c}</option>
+                  ))}
+              </optgroup>
             ))}
           </select>
         </div>

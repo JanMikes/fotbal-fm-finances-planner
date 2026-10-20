@@ -7,7 +7,14 @@ import type { OrgNode, Task } from "@/lib/types";
 export function TaskCard({ task, nodes, inLastColumn, attachments }: { task: Task; nodes: readonly OrgNode[]; inLastColumn: boolean; attachments: number }) {
   return (
     <>
-      <span className="cat">{task.category}</span>
+      <div className="cats">
+        <span className="cat">{task.category}</span>
+        {task.subcategories.map((c) => (
+          <span key={c} className="cat sub">
+            {c}
+          </span>
+        ))}
+      </div>
       <h3>{task.title}</h3>
       {task.description ? <p>{task.description}</p> : null}
       <div className="ft">

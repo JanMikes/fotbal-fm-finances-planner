@@ -1,0 +1,1 @@
+ALTER TABLE "tasks" ADD COLUMN "subcategories" text[] DEFAULT '{}'::text[] NOT NULL;

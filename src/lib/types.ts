@@ -36,6 +36,8 @@ export interface Task {
   id: string;
   columnId: string;
   category: string;
+  /** Extra categories („Podkategorie"), same values as `category`. */
+  subcategories: string[];
   title: string;
   description: string;
   leadId: string | null;

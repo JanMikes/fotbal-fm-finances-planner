@@ -4,6 +4,7 @@ import {
   defaultTaskCategory,
   groupCounts,
   inGroup,
+  taskInGroup,
   itemsInColumn,
   lastColumnId,
   printMonthOptions,
@@ -26,6 +27,15 @@ describe("groups", () => {
     expect(inGroup("Celý klub", "Vše")).toBe(true);
     expect(inGroup("Merch", "Merch")).toBe(true);
     expect(inGroup("X", "Neexistuje")).toBe(false);
+  });
+
+  it("taskInGroup matches the category or any subcategory", () => {
+    expect(taskInGroup(task({ category: "Celý klub", subcategories: ["Muži B", "Foto"] }), "Muži")).toBe(true);
+    expect(taskInGroup(task({ category: "Celý klub", subcategories: ["Foto"] }), "Foto")).toBe(true);
+    expect(taskInGroup(task({ category: "Celý klub", subcategories: ["Foto"] }), "Mládež")).toBe(false);
+    const counts = groupCounts([task({ category: "Merch", subcategories: ["Muži A"] })]);
+    expect(counts.find((c) => c.group === "Muži")?.count).toBe(1);
+    expect(counts.find((c) => c.group === "Merch")?.count).toBe(1);
   });
 
   it("group counts ignore other filters and include Vše", () => {

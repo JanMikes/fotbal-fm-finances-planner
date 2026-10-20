@@ -88,6 +88,18 @@ describe("tasks", () => {
     expect((await call(taskRoute.PATCH, { method: "PATCH", params: { id: "not-a-uuid" }, body: {} })).status).toBe(404);
   });
 
+  it("stores subcategories (default empty), updates them and copies them on duplicate", async () => {
+    const [c1] = taskCols(await getState());
+    expect((await newTask(c1.id, "Bez")).subcategories).toEqual([]);
+    const a = await newTask(c1.id, "S", { subcategories: [" Merch ", "Web"] });
+    expect(a.subcategories).toEqual(["Merch", "Web"]);
+    expect((await call(tasksRoute.POST, { method: "POST", body: { columnId: c1.id, category: "Web", title: "x", subcategories: [""] } })).status).toBe(400);
+    const u = await call<Task>(taskRoute.PATCH, { method: "PATCH", params: { id: a.id }, body: { subcategories: ["Foto"] } });
+    expect(u.body.subcategories).toEqual(["Foto"]);
+    const d = await call<{ task: Task }>(taskDup.POST, { method: "POST", params: { id: a.id }, body: {} });
+    expect(d.body.task.subcategories).toEqual(["Foto"]);
+  });
+
   it("moves before a card or to the end, across columns", async () => {
     const s = await getState();
     const [c1, c2] = taskCols(s);

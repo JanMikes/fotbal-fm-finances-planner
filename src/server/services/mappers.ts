@@ -40,6 +40,7 @@ export const mapTask = (r: Row<typeof tasks>): Task => ({
   id: r.id,
   columnId: r.columnId,
   category: r.category,
+  subcategories: r.subcategories ?? [],
   title: r.title,
   description: r.description,
   leadId: r.leadId,

@@ -31,6 +31,7 @@ export function task(over: Partial<Task> = {}): Task {
     id: id("t"),
     columnId: "c1",
     category: "Muži A",
+    subcategories: [],
     title: "Plakát",
     description: "",
     leadId: null,

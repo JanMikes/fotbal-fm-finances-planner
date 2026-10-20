@@ -35,6 +35,11 @@ export function inGroup(cat: string, group: string): boolean {
   return group === ALL || (GROUPS[group] ?? []).includes(cat);
 }
 
+/** Task belongs to group by its category or any of its subcategories. */
+export function taskInGroup(t: Pick<Task, "category" | "subcategories">, group: string): boolean {
+  return inGroup(t.category, group) || t.subcategories.some((c) => inGroup(c, group));
+}
+
 /** Validate a stored group filter value. */
 export function isValidGroupFilter(g: unknown): g is string {
   return typeof g === "string" && GROUP_FILTERS.includes(g);
@@ -58,13 +63,13 @@ export interface TaskFilter {
 
 /** Task visibility (prototype `visible(t)` tasks mode). */
 export function taskVisible(t: Task, f: TaskFilter): boolean {
-  if (!inGroup(t.category, f.filter)) return false;
+  if (!taskInGroup(t, f.filter)) return false;
   if (!monthMatches(t.dueDate, f.month)) return false;
   // no identity (e.g. no members yet) → nothing is „mine" (prototype: `t.lead !== S.me && t.owner !== S.me`)
   if (f.mine && (!f.me || (t.leadId !== f.me && t.ownerId !== f.me))) return false;
   if (f.q) {
     const q = f.q.toLowerCase();
-    if (!(t.title + " " + t.description + " " + t.category).toLowerCase().includes(q)) return false;
+    if (![t.title, t.description, t.category, ...t.subcategories].join(" ").toLowerCase().includes(q)) return false;
   }
   return true;
 }
@@ -72,7 +77,7 @@ export function taskVisible(t: Task, f: TaskFilter): boolean {
 /** Group select counts: all tasks per group, ignoring month/search/mine. */
 export function groupCounts(tasks: readonly Task[]): Array<{ group: string; count: number; label: string }> {
   return GROUP_FILTERS.map((g) => {
-    const count = tasks.filter((t) => inGroup(t.category, g)).length;
+    const count = tasks.filter((t) => taskInGroup(t, g)).length;
     return { group: g, count, label: `${g} (${count})` };
   });
 }
@@ -100,7 +105,7 @@ export function taskMonthOptions(tasks: readonly Task[], group: string, now: Dat
   return [
     { value: "all", label: "Všechny měsíce" },
     ...months.map((m) => {
-      const count = tasks.filter((t) => inGroup(t.category, group) && t.dueDate && t.dueDate.slice(0, 7) === m).length;
+      const count = tasks.filter((t) => taskInGroup(t, group) && t.dueDate && t.dueDate.slice(0, 7) === m).length;
       return { value: m, label: monLab(m) + (count ? ` (${count})` : ""), value2: count };
     }),
     { value: "none", label: "Bez termínu" },

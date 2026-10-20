@@ -22,6 +22,13 @@
       "when": 1791892148321,
       "tag": "0002_budget_installment_from_null",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792479552918,
+      "tag": "0003_task_subcategories",
+      "breakpoints": true
     }
   ]
 }
