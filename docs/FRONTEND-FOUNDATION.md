@@ -42,7 +42,7 @@ change an API contract, update `docs/API.md` and the integration tests.
 | `src/lib/store/store.ts` | `AppStore` (framework-agnostic): state, optimistic `mutate`, refetch scheduling, load retry with backoff, `notify(msg)` (toast). |
 | `src/lib/store/optimistic.ts` | Pure optimistic transitions mirroring the server rules (move, duplicate, delete column/type/node, close year …). |
 | `src/lib/store/actions.ts` | `createActions(store)` — the mutations the UI calls. |
-| `src/lib/store/realtime.ts` | SSE client with reconnect/backoff + auth probe; every `hello` (incl. the first) and `resync` triggers a full refetch. |
+| `src/lib/store/realtime.ts` | SSE client with reconnect/backoff + auth probe; every `hello` (incl. the first) and `resync` triggers a full refetch. **At most one EventSource per tab** (handlers bound to their own source, generation-guarded); a non-2xx probe (edge 403, 429, 5xx) keeps backing off without opening a stream. |
 | `src/lib/store/react.tsx` | `StoreProvider`, `StoreGate`, `useAppState`, `useStoreSnapshot`, `useActions`, `usePrefs`, `useStore`. |
 
 ## Using the store
