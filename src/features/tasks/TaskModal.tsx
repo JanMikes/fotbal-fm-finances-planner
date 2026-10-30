@@ -15,12 +15,22 @@ import {
 import { uuid } from "@/lib/api";
 import { CATEGORY_OPTGROUPS, CATS } from "@/lib/constants";
 import { columnsOf, defaultTaskCategory } from "@/lib/filters";
-import { formatDate } from "@/lib/format";
+import { formatDate, parseHours } from "@/lib/format";
 import { changedFields, isEmptyPatch } from "@/lib/patch";
 import { useActions, useAppState, usePrefs, useStore } from "@/lib/store/react";
 import { personsInOrder } from "@/lib/tree";
 
-type TaskForm = { category: string; subcategories: string[]; columnId: string; title: string; dueDate: string; description: string; leadId: string; ownerId: string };
+type TaskForm = {
+  category: string;
+  subcategories: string[];
+  columnId: string;
+  title: string;
+  dueDate: string;
+  description: string;
+  leadId: string;
+  ownerId: string;
+  hours: string;
+};
 
 /** Form values → API fields (shared by the save payload and the „unchanged" baseline). */
 function taskFields(f: TaskForm) {
@@ -33,6 +43,7 @@ function taskFields(f: TaskForm) {
     dueDate: f.dueDate || null,
     leadId: f.leadId || null,
     ownerId: f.ownerId || null,
+    hoursWorked: parseHours(f.hours) ?? null,
   };
 }
 
@@ -71,12 +82,14 @@ export function TaskModal({
       description: t?.description ?? "",
       leadId: t?.leadId ?? "",
       ownerId: t?.ownerId ?? "",
+      hours: t?.hoursWorked != null ? String(t.hoursWorked).replace(".", ",") : "",
     };
   });
   const [f, setF] = useState(init);
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((p) => ({ ...p, [k]: v }));
   const [draft, setDraft] = useState<AttachmentDraft>(emptyDraft);
   const [titleErr, setTitleErr] = useState(false);
+  const [hoursErr, setHoursErr] = useState(false);
   const [busy, setBusy] = useState(false);
   const titleRef = useRef<HTMLInputElement | null>(null);
 
@@ -107,6 +120,10 @@ export function TaskModal({
     if (!title) {
       setTitleErr(true);
       titleRef.current?.focus();
+      return;
+    }
+    if (parseHours(f.hours) === undefined) {
+      setHoursErr(true);
       return;
     }
     const fields = taskFields(f);
@@ -279,6 +296,20 @@ export function TaskModal({
               </option>
             ))}
           </select>
+        </div>
+        <div className="f">
+          <label htmlFor="fHours">Odpracováno hodin</label>
+          <input
+            id="fHours"
+            inputMode="decimal"
+            value={f.hours}
+            placeholder="Např. 2,5"
+            style={hoursErr ? { borderColor: "#b3261e" } : undefined}
+            onChange={(e) => {
+              set("hours", e.target.value);
+              setHoursErr(false);
+            }}
+          />
         </div>
         <div className="f w">
           <span className="lbl">Přílohy a odkazy</span>

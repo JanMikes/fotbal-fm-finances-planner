@@ -50,7 +50,7 @@ export function removeTask(s: AppState, id: string): AppState {
 export function duplicateTask(s: AppState, srcId: string, copy: Partial<Task> & { id: string }): AppState {
   const src = s.tasks.find((t) => t.id === srcId);
   if (!src) return s;
-  const added = { ...src, ...copy, title: copy.title ?? `${src.title} (kopie)` };
+  const added = { ...src, hoursWorked: null, ...copy, title: copy.title ?? `${src.title} (kopie)` };
   const tasks = placeInColumn([...s.tasks, added], added.id, src.columnId, { afterId: srcId });
   return { ...s, tasks };
 }

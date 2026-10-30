@@ -5,7 +5,7 @@ import { appendOrder, between, type Sortable } from "@/lib/sortOrder";
 import type { BoardColumn, BoardId, PrintItem, Task } from "@/lib/types";
 import { getDb, type DbOrTx, type Tx } from "../db/client";
 import { boardColumns, orgNodes, printItems, printTypes, tasks } from "../db/schema";
-import { badRequest, notFound, zId, zIsoDate, zMoney, zRequiredText, zTrimmed, type Ctx } from "../http";
+import { badRequest, notFound, zHours, zId, zIsoDate, zMoney, zRequiredText, zTrimmed, type Ctx } from "../http";
 import { notify } from "../notify";
 import { copyAttachments, deleteAttachmentsOf, withFileRollback } from "./attachments";
 import { mapColumn, mapPrintItem, mapTask } from "./mappers";
@@ -105,6 +105,7 @@ export const createTaskSchema = z.object({
   leadId: zPersonRef,
   ownerId: zPersonRef,
   dueDate: zIsoDate.nullable().optional(),
+  hoursWorked: zHours.optional(),
   createdBy: zPersonRef,
 });
 export const updateTaskSchema = createTaskSchema.omit({ id: true, createdBy: true }).partial().strict();
@@ -161,6 +162,7 @@ export async function createTask(input: z.infer<typeof createTaskSchema>, ctx: C
         leadId: input.leadId ?? null,
         ownerId: input.ownerId ?? null,
         dueDate: input.dueDate ?? null,
+        hoursWorked: input.hoursWorked ?? null,
         createdBy: input.createdBy ?? null,
         sortOrder: appendOrder(await taskSiblings(tx, input.columnId)),
       })
@@ -237,6 +239,7 @@ export async function duplicateTask(id: string, input: z.infer<typeof duplicateS
         ...rest,
         ...(input.id && { id: input.id }),
         title: `${src.title} (kopie)`,
+        hoursWorked: null, // the copy is new work: hours are not duplicated (would double-count)
         createdBy: input.createdBy ?? src.createdBy,
         sortOrder: between(Number(src.sortOrder), null),
       })

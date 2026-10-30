@@ -79,6 +79,8 @@ export const tasks = pgTable(
     leadId: uuid("lead_id").references(() => orgNodes.id, { onDelete: "set null" }),
     ownerId: uuid("owner_id").references(() => orgNodes.id, { onDelete: "set null" }),
     dueDate: date("due_date", { mode: "string" }),
+    /** „Odpracováno hodin" (2 decimals); null = not filled. */
+    hoursWorked: numeric("hours_worked", { precision: 8, scale: 2, mode: "number" }),
     sortOrder: numeric("sort_order", { mode: "number" }).notNull().default(0),
     createdBy: uuid("created_by").references(() => orgNodes.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),

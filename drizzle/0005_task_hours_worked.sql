@@ -1,0 +1,1 @@
+ALTER TABLE "tasks" ADD COLUMN "hours_worked" numeric(8, 2);

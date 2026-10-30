@@ -46,6 +46,8 @@ export interface Task {
   ownerId: string | null;
   /** "YYYY-MM-DD" */
   dueDate: string | null;
+  /** „Odpracováno hodin", up to 2 decimals; null = not filled. */
+  hoursWorked: number | null;
   sortOrder: number;
   createdBy: string | null;
   createdAt: string;

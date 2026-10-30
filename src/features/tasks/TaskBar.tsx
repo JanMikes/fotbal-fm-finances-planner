@@ -1,9 +1,13 @@
 "use client";
-/** Úkoly filter bar (prototype §7.1): group select with counts, month select, search, „Jen moje úkoly", hint. */
-import { groupCounts, taskMonthOptions } from "@/lib/filters";
+/**
+ * Úkoly filter bar (prototype §7.1): group select with counts, month select, search, „Jen moje úkoly", hint and the
+ * „Odpracováno" box — Σ hours of the visible (filtered) cards.
+ */
+import { groupCounts, taskHoursLabel, taskMonthOptions } from "@/lib/filters";
+import { hoursLabel } from "@/lib/format";
 import { useAppState, usePrefs } from "@/lib/store/react";
 
-export function TaskBar({ q, onQ }: { q: string; onQ: (q: string) => void }) {
+export function TaskBar({ q, onQ, hours }: { q: string; onQ: (q: string) => void; hours: number }) {
   const state = useAppState();
   const [prefs, updatePrefs] = usePrefs();
   const groups = groupCounts(state.tasks);
@@ -31,6 +35,9 @@ export function TaskBar({ q, onQ }: { q: string; onQ: (q: string) => void }) {
           <input type="checkbox" id="mine" checked={prefs.mine} onChange={(e) => updatePrefs({ mine: e.target.checked })} /> Jen moje úkoly
         </label>
         <div className="hint">Karty přetahujte myší nebo podržením prstu</div>
+        <div className="ptot thours">
+          <span id="thoursL">{taskHoursLabel(month)}</span> <b id="thours">{hoursLabel(hours)}</b>
+        </div>
       </div>
     </div>
   );

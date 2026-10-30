@@ -224,6 +224,18 @@ export function printTotalLabel(month: MonthFilter): string {
   return "Celkem za " + monLab(month);
 }
 
+/** Σ hoursWorked (null → 0), rounded to 2 decimals (float sums). */
+export function sumHours(tasks: readonly Task[]): number {
+  return Math.round(tasks.reduce((s, t) => s + (t.hoursWorked || 0), 0) * 100) / 100;
+}
+
+/** Úkoly hours box label: `Odpracováno` / `Odpracováno bez termínu` / `Odpracováno za Říjen 2026`. */
+export function taskHoursLabel(month: MonthFilter): string {
+  if (!month || month === "all") return "Odpracováno";
+  if (month === "none") return "Odpracováno bez termínu";
+  return "Odpracováno za " + monLab(month);
+}
+
 /** Default category for a new task: first category of the active group, else „Celý klub". */
 export function defaultTaskCategory(group: string): string {
   return group !== ALL && GROUPS[group]?.length ? GROUPS[group][0] : "Celý klub";

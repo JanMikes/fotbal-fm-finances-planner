@@ -2,6 +2,7 @@
 /** Inner content of a task card (prototype §7.4 `cardHTML`, tasks mode). The `.card` wrapper is rendered by <Board>. */
 import { Avatar } from "@/components/ui/Avatar";
 import { DueChip } from "@/features/board/DueChip";
+import { hoursLabel } from "@/lib/format";
 import type { OrgNode, Task } from "@/lib/types";
 
 export function TaskCard({ task, nodes, inLastColumn, attachments }: { task: Task; nodes: readonly OrgNode[]; inLastColumn: boolean; attachments: number }) {
@@ -24,6 +25,11 @@ export function TaskCard({ task, nodes, inLastColumn, attachments }: { task: Tas
         </span>
         {task.dueDate ? <DueChip date={task.dueDate} inLastColumn={inLastColumn} /> : null}
         {attachments > 0 ? <span className="att">Přílohy {attachments}</span> : null}
+        {task.hoursWorked ? (
+          <span className="hrs" title="Odpracováno hodin">
+            {hoursLabel(task.hoursWorked)}
+          </span>
+        ) : null}
       </div>
     </>
   );

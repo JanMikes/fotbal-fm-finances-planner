@@ -159,5 +159,12 @@ export const zMoney = z.preprocess((v) => {
   const d = String(v).replace(/\D/g, "");
   return d ? Number(d) : null;
 }, z.number().int().min(0).max(2_000_000_000).nullable());
+/** Hours (decimal, „1,5" or "1.5"); rounded to 2 decimals. "" / null = not filled. */
+export const zHours = z.preprocess((v) => {
+  if (v === "" || v === null || v === undefined) return v === "" ? null : v;
+  if (typeof v === "number") return v;
+  const s = String(v).replace(/\s|h$/gi, "").replace(",", ".");
+  return s === "" ? null : Number(s);
+}, z.number().min(0).max(100_000).transform((n) => Math.round(n * 100) / 100).nullable());
 export const zTrimmed = (max: number) => z.string().trim().max(max);
 export const zRequiredText = (max: number) => z.string().trim().min(1, "Povinné pole.").max(max);

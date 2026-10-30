@@ -36,6 +36,13 @@
       "when": 1793364889637,
       "tag": "0004_print_incomes",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793367078489,
+      "tag": "0005_task_hours_worked",
+      "breakpoints": true
     }
   ]
 }

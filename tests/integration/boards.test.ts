@@ -88,6 +88,23 @@ describe("tasks", () => {
     expect((await call(taskRoute.PATCH, { method: "PATCH", params: { id: "not-a-uuid" }, body: {} })).status).toBe(404);
   });
 
+  it("stores hours worked (decimal comma, 2 decimals), validates them and does not copy them on duplicate", async () => {
+    const [c1] = taskCols(await getState());
+    expect((await newTask(c1.id, "Bez hodin")).hoursWorked).toBeNull();
+    const a = await newTask(c1.id, "H", { hoursWorked: "1,5" });
+    expect(a.hoursWorked).toBe(1.5);
+    const upd = await call<Task>(taskRoute.PATCH, { method: "PATCH", params: { id: a.id }, body: { hoursWorked: 2.257 } });
+    expect(upd.body.hoursWorked).toBe(2.26);
+    expect((await getState()).tasks.find((t) => t.id === a.id)?.hoursWorked).toBe(2.26);
+    for (const bad of ["abc", -1, "1,5,2"]) {
+      expect((await call(taskRoute.PATCH, { method: "PATCH", params: { id: a.id }, body: { hoursWorked: bad } })).status).toBe(400);
+    }
+    const dup = await call<{ task: Task }>(taskDup.POST, { method: "POST", params: { id: a.id }, body: {} });
+    expect(dup.body.task.hoursWorked).toBeNull();
+    const cleared = await call<Task>(taskRoute.PATCH, { method: "PATCH", params: { id: a.id }, body: { hoursWorked: null } });
+    expect(cleared.body.hoursWorked).toBeNull();
+  });
+
   it("stores subcategories (default empty), updates them and copies them on duplicate", async () => {
     const [c1] = taskCols(await getState());
     expect((await newTask(c1.id, "Bez")).subcategories).toEqual([]);

@@ -124,8 +124,10 @@ export interface MoveNodeInput {
   adoptChildren?: boolean;
 }
 export type CreateTaskInput = Pick<Task, "columnId" | "category" | "title"> &
-  Partial<Pick<Task, "id" | "subcategories" | "description" | "leadId" | "ownerId" | "dueDate" | "createdBy">>;
-export type UpdateTaskInput = Partial<Pick<Task, "columnId" | "category" | "subcategories" | "title" | "description" | "leadId" | "ownerId" | "dueDate">>;
+  Partial<Pick<Task, "id" | "subcategories" | "description" | "leadId" | "ownerId" | "dueDate" | "hoursWorked" | "createdBy">>;
+export type UpdateTaskInput = Partial<
+  Pick<Task, "columnId" | "category" | "subcategories" | "title" | "description" | "leadId" | "ownerId" | "dueDate" | "hoursWorked">
+>;
 export type CreatePrintItemInput = Pick<PrintItem, "columnId" | "typeId" | "title"> &
   Partial<Pick<PrintItem, "id" | "description" | "quantity" | "price" | "paidByClub" | "realizationDate" | "createdBy">>;
 export type UpdatePrintItemInput = Partial<

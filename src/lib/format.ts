@@ -91,6 +91,22 @@ export function formatDayMonth(d: string | Date): string {
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
+/**
+ * Parse typed hours („1,5", "1.5", „2 h"): null when empty, undefined when not a valid non-negative number.
+ * Rounded to 2 decimals like the server.
+ */
+export function parseHours(v: string): number | null | undefined {
+  const s = v.replace(/\s|h$/gi, "").replace(",", ".");
+  if (s === "") return null;
+  const n = Number(s);
+  return Number.isFinite(n) && n >= 0 && n <= 100_000 ? Math.round(n * 100) / 100 : undefined;
+}
+
+/** `12,5 h` (max 2 decimals, non-breaking). */
+export function hoursLabel(n: number | null | undefined): string {
+  return (n || 0).toLocaleString("cs-CZ", { maximumFractionDigits: 2 }).replace(/[\u00a0\u202f ]/g, NBSP) + NBSP + "h";
+}
+
 /** "YYYY-MM-DD" of a local date. */
 export function isoDay(d: Date = new Date()): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;

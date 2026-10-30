@@ -121,13 +121,15 @@ Only the **tasks** board has editable columns. Print columns (Poptávka, Ve výr
 
 ## Tasks (`/api/tasks`)
 
-`Task = {id, columnId, category, title, description, leadId, ownerId, dueDate, sortOrder, createdBy, createdAt}`.
-`leadId` / `ownerId` / `createdBy` must be **person** nodes (or null).
+`Task = {id, columnId, category, title, description, leadId, ownerId, dueDate, hoursWorked, sortOrder, createdBy, createdAt}`.
+`leadId` / `ownerId` / `createdBy` must be **person** nodes (or null). `hoursWorked` = „Odpracováno hodin": a number
+or text with a decimal comma or dot (`"1,5"`), 0–100 000, stored rounded to 2 decimals; null = not filled. Duplicates
+do not copy it.
 
 | Method | Path | Body | Response / rules |
 |---|---|---|---|
-| POST | `/api/tasks` | `{id?, columnId, category, title, description?, leadId?, ownerId?, dueDate?, createdBy?}` | `201 Task`, appended to the end of the column. Column must belong to the tasks board. |
-| PATCH | `/api/tasks/:id` | subset of `{columnId, category, title, description, leadId, ownerId, dueDate}` | `Task`. A changed `columnId` appends to the end of the new column (form "Stav" change). Unknown keys → 400. |
+| POST | `/api/tasks` | `{id?, columnId, category, title, description?, leadId?, ownerId?, dueDate?, hoursWorked?, createdBy?}` | `201 Task`, appended to the end of the column. Column must belong to the tasks board. |
+| PATCH | `/api/tasks/:id` | subset of `{columnId, category, title, description, leadId, ownerId, dueDate, hoursWorked}` | `Task`. A changed `columnId` appends to the end of the new column (form "Stav" change). Unknown keys → 400. |
 | PATCH | `/api/tasks/:id/move` | `{columnId, beforeId?}` | `Task`. Inserted before `beforeId` (must be in the target column) or appended when null/absent. Use the next **visible** card as `beforeId` (prototype §7.7). |
 | POST | `/api/tasks/:id/duplicate` | `{id?, createdBy?}` | `201 {task, attachments}`. Copy „… (kopie)" placed right after the original; attachments (files duplicated on disk, links) copied. |
 | DELETE | `/api/tasks/:id` | – | `{ok:true}`; its attachments (rows + files) are deleted too. |

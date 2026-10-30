@@ -42,6 +42,9 @@ UI wording/look/behaviour = prototype (`prototype.md`) unless listed here.
     Hotovo. „Celkem" and the month-select sums = visible spending − visible incomes (may go negative). The month filter
     uses the paid date and search applies; incomes have no media type, so a specific type filter hides them. Year
     close / reopen archives incomes by paid date; the yearly report lists them with total and net.
+13. Úkoly „Odpracováno hodin" (2026-10): optional decimal `tasks.hours_worked` (numeric 8,2). The bar shows
+    „Odpracováno … h" = Σ hours of the visible cards (every filter applies: category, month, Jen moje, search), label
+    follows the month like the Tiskoviny „Celkem". „Duplikovat" does not copy hours (the copy is new work).
 
 ## Technical stack
 - **Next.js (latest stable, App Router, TypeScript strict, `output: 'standalone'`)**, React. The app is one

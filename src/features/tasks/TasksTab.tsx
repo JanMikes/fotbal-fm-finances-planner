@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useUi } from "@/components/UiContext";
 import { attachmentCounts } from "@/features/attachments/AttachmentBox";
 import { Board } from "@/features/board/Board";
-import { columnsOf, itemsInColumn, taskVisible } from "@/lib/filters";
+import { columnsOf, itemsInColumn, sumHours, taskVisible } from "@/lib/filters";
 import { useActions, useAppState, usePrefs } from "@/lib/store/react";
 import type { Task } from "@/lib/types";
 import { TaskBar } from "./TaskBar";
@@ -27,7 +27,7 @@ export function TasksTab() {
 
   return (
     <>
-      <TaskBar q={q} onQ={setQ} />
+      <TaskBar q={q} onQ={setQ} hours={sumHours([...visible.values()].flat())} />
       <Board<Task>
         mode="tasks"
         columns={cols}

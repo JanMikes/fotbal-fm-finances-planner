@@ -46,6 +46,7 @@ export const mapTask = (r: Row<typeof tasks>): Task => ({
   leadId: r.leadId,
   ownerId: r.ownerId,
   dueDate: r.dueDate,
+  hoursWorked: r.hoursWorked === null ? null : num(r.hoursWorked),
   sortOrder: num(r.sortOrder),
   createdBy: r.createdBy,
   createdAt: toIso(r.createdAt),

@@ -34,3 +34,9 @@ body.dragging .board{scroll-snap-type:none}
 .card .price.income{background:#1f8a4c}
 .card .paid-on{white-space:nowrap}
 .yv-r .pr.inc{color:#1f8a4c}
+
+/* Úkoly: „Odpracováno hodin" chip on cards + total box in the bar (same look as the Tiskoviny „Celkem"). */
+.card .hrs{white-space:nowrap;font-size:12px;font-weight:800;color:var(--fm-navy);background:var(--grey-100);padding:3px 8px;border-radius:3px}
+.card .att+.hrs{margin-left:0}
+.hint+.thours{margin-left:12px}
+@media (max-width:760px){.hint+.thours{margin-left:0}}

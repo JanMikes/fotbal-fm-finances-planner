@@ -17,7 +17,10 @@ async function login(request: APIRequestContext) {
   expect((await request.post("/api/auth/login", { data: { password: PASSWORD } })).status()).toBe(200);
 }
 
-async function createTask(request: APIRequestContext, data: { columnId: string; title: string; category?: string; dueDate?: string | null; leadId?: string | null; ownerId?: string | null }) {
+async function createTask(
+  request: APIRequestContext,
+  data: { columnId: string; title: string; category?: string; dueDate?: string | null; leadId?: string | null; ownerId?: string | null; hoursWorked?: number | null },
+) {
   const res = await request.post("/api/tasks", { data: { category: "Celý klub", description: "", ...data } });
   expect(res.status()).toBe(201);
   return ((await res.json()) as { id: string }).id;
@@ -356,4 +359,34 @@ test("realtime: a change in one browser appears in another without reload", asyn
     await ctxA.close();
     await ctxB.close();
   }
+});
+
+test("„Odpracováno hodin“: decimal input, card chip, bar total of the visible cards follows the month filter", async ({ page, request }) => {
+  const cols = columnsOf(await getState(request), "tasks");
+  const H = `${TAG} HRS`;
+  await createTask(request, { columnId: cols[0].id, title: `${H} Říjen`, dueDate: "2026-10-05", hoursWorked: 2 });
+  await createTask(request, { columnId: cols[1].id, title: `${H} Bez termínu`, hoursWorked: 0.75 });
+  await open(page, H);
+  await expect(page.locator("#thoursL")).toHaveText("Odpracováno");
+  await expect(page.locator("#thours")).toHaveText("2,75 h");
+
+  await page.locator("#btnNew").click();
+  const modal = page.getByTestId("task-modal");
+  await modal.locator("#fTitle").fill(`${H} Listopad`);
+  await modal.locator("#fDue").fill("2026-11-10");
+  await modal.locator("#fHours").fill("abc");
+  await modal.getByRole("button", { name: "Vytvořit úkol" }).click();
+  await expect(modal).toBeVisible(); // invalid hours are not saved
+  await modal.locator("#fHours").fill("1,5");
+  await modal.getByRole("button", { name: "Vytvořit úkol" }).click();
+  await expect(modal).toHaveCount(0);
+  await expect(card(page, `${H} Listopad`).locator(".hrs")).toHaveText("1,5 h");
+  await expect(page.locator("#thours")).toHaveText("4,25 h");
+
+  await page.locator("#mon").selectOption("2026-10");
+  await expect(page.locator("#thoursL")).toHaveText("Odpracováno za Říjen 2026");
+  await expect(page.locator("#thours")).toHaveText("2 h");
+  await page.locator("#mon").selectOption("none");
+  await expect(page.locator("#thours")).toHaveText("0,75 h");
+  await page.locator("#mon").selectOption("all");
 });

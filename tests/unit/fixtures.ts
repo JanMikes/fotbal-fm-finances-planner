@@ -37,6 +37,7 @@ export function task(over: Partial<Task> = {}): Task {
     leadId: null,
     ownerId: null,
     dueDate: null,
+    hoursWorked: null,
     sortOrder: 1,
     createdBy: null,
     createdAt: "2026-01-01T00:00:00.000Z",
