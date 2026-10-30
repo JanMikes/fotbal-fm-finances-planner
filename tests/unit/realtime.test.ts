@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { connectRealtime } from "@/lib/store/realtime";
+import { connectRealtime, printPage, PRINT_RESUME_MS } from "@/lib/store/realtime";
 import type { AppStore } from "@/lib/store/store";
 
 /** Minimal EventSource stand-in: records every instance and lets the test fire events / errors on it. */
@@ -28,6 +28,8 @@ const response = (status: number) => ({ status, ok: status >= 200 && status < 30
 
 describe("connectRealtime", () => {
   let win: EventTarget;
+  // every connection is stopped after its test (printPage acts on all live connections)
+  let stops: Array<() => void> = [];
   beforeEach(() => {
     FakeEventSource.instances = [];
     vi.useFakeTimers();
@@ -36,13 +38,18 @@ describe("connectRealtime", () => {
     vi.stubGlobal("window", win);
   });
   afterEach(() => {
+    for (const stop of stops) stop();
+    stops = [];
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
-  const connect = (fetchImpl: typeof fetch = vi.fn(async () => response(200))) =>
-    connectRealtime(fakeStore(), { EventSource: FakeEventSource as unknown as typeof EventSource, fetch: fetchImpl });
+  const connect = (fetchImpl: typeof fetch = vi.fn(async () => response(200))) => {
+    const stop = connectRealtime(fakeStore(), { EventSource: FakeEventSource as unknown as typeof EventSource, fetch: fetchImpl });
+    stops.push(stop);
+    return stop;
+  };
 
   it("opens exactly one stream", () => {
     connect();
@@ -104,7 +111,7 @@ describe("connectRealtime", () => {
 
   it("hello resets the backoff and marks the store online", async () => {
     const store = fakeStore();
-    connectRealtime(store, { EventSource: FakeEventSource as unknown as typeof EventSource, fetch: vi.fn(async () => response(200)) });
+    stops.push(connectRealtime(store, { EventSource: FakeEventSource as unknown as typeof EventSource, fetch: vi.fn(async () => response(200)) }));
     FakeEventSource.instances[0].emit("hello");
     expect(store.setOnline).toHaveBeenCalledWith(true);
     expect(store.scheduleRefetch).toHaveBeenCalledWith(0);
@@ -118,5 +125,37 @@ describe("connectRealtime", () => {
     await vi.advanceTimersByTimeAsync(60_000);
     expect(FakeEventSource.instances).toHaveLength(1);
     expect(open()).toHaveLength(0);
+  });
+
+  describe("printPage (Safari never prints while the stream is open)", () => {
+    const printWin = () => Object.assign(new EventTarget(), { print: vi.fn() }) as unknown as Window & { print: ReturnType<typeof vi.fn> };
+
+    it("closes the stream before printing and reconnects on afterprint", async () => {
+      const stop = connect();
+      const w = printWin();
+      printPage(w);
+      expect(open()).toHaveLength(0);
+      win.dispatchEvent(new Event("online")); // must not reopen while printing
+      expect(open()).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(50);
+      expect(w.print).toHaveBeenCalledTimes(1);
+      w.dispatchEvent(new Event("afterprint"));
+      expect(open()).toHaveLength(1);
+      w.dispatchEvent(new Event("afterprint")); // resumes once
+      expect(open()).toHaveLength(1);
+      stop();
+    });
+
+    it("reconnects after the fallback when afterprint never fires; a stopped connection stays closed", async () => {
+      const stop = connect();
+      printPage(printWin());
+      await vi.advanceTimersByTimeAsync(PRINT_RESUME_MS);
+      expect(open()).toHaveLength(1);
+      stop();
+      const w = printWin();
+      printPage(w);
+      w.dispatchEvent(new Event("afterprint"));
+      expect(open()).toHaveLength(0);
+    });
   });
 });

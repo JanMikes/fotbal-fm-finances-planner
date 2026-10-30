@@ -14,6 +14,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { PAYER_LABEL } from "@/lib/constants";
 import { formatDate, kcs, NBSP, nf, thousandsLabel } from "@/lib/format";
 import { buildYearReport } from "@/lib/report";
+import { printPage } from "@/lib/store/realtime";
 import { useActions, useAppState } from "@/lib/store/react";
 import type { PrintItem } from "@/lib/types";
 import "./print-report.css";
@@ -109,7 +110,7 @@ export function PrintReport({ onBack }: { onBack: () => void }) {
           </select>
           {r.closedAt ? <span className="yv-st">Uzavřeno {formatDate(r.closedAt)}</span> : null}
           <span className="yv-sp" />
-          <button className="btn outline" id="yrPrint" type="button" onClick={() => window.print()}>
+          <button className="btn outline" id="yrPrint" type="button" onClick={() => printPage()}>
             Tisk / PDF
           </button>
           {r.closedAt ? (

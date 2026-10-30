@@ -23,6 +23,34 @@ export interface RealtimeOptions {
 }
 
 const MAX_DELAY_MS = 30_000;
+/** Reconnect after printing even when the browser never fires `afterprint`. */
+export const PRINT_RESUME_MS = 60_000;
+
+/** Live connections (normally one per tab), paused by `printPage`. */
+const live = new Set<{ pause: () => void; resume: () => void }>();
+
+/**
+ * Print the page. WebKit (Safari) defers `window.print()` while the document is still loading — and an open
+ * EventSource is a pending subresource load, so with the realtime stream open Safari silently never printed the
+ * yearly report (2026-10-30). Pause the stream(s), print, and reconnect afterwards (`afterprint`, or after
+ * PRINT_RESUME_MS); the reconnect's `hello` refetches, so changes made meanwhile are not lost.
+ */
+export function printPage(win: Window = window): void {
+  const paused = [...live];
+  for (const c of paused) c.pause();
+  let done = false;
+  const resume = () => {
+    if (done) return;
+    done = true;
+    win.removeEventListener("afterprint", resume);
+    clearTimeout(fallback);
+    for (const c of paused) c.resume();
+  };
+  win.addEventListener("afterprint", resume);
+  const fallback = setTimeout(resume, PRINT_RESUME_MS);
+  // let the cancelled stream leave the document loader first
+  setTimeout(() => win.print(), 50);
+}
 
 export function connectRealtime(store: AppStore, opts: RealtimeOptions = {}): () => void {
   const url = opts.url ?? "/api/realtime";
@@ -34,6 +62,8 @@ export function connectRealtime(store: AppStore, opts: RealtimeOptions = {}): ()
   // bumped by every open(); a handler or probe continuation from an older generation does nothing
   let gen = 0;
   let stopped = false;
+  // closed for printing (see printPage): no stream, no reconnects until resumed
+  let paused = false;
 
   const teardown = () => {
     if (timer) clearTimeout(timer);
@@ -71,7 +101,7 @@ export function connectRealtime(store: AppStore, opts: RealtimeOptions = {}): ()
   };
 
   const open = () => {
-    if (stopped) return;
+    if (stopped || paused) return;
     teardown();
     const myGen = ++gen;
     const source = new ES(url, { withCredentials: true });
@@ -110,15 +140,31 @@ export function connectRealtime(store: AppStore, opts: RealtimeOptions = {}): ()
   };
 
   const onOnline = () => {
-    if (!es && !stopped) {
+    if (!es && !stopped && !paused) {
       attempt = 0;
       open();
     }
   };
   if (typeof window !== "undefined") window.addEventListener("online", onOnline);
+  const handle = {
+    pause: () => {
+      if (stopped) return;
+      paused = true;
+      gen++; // a probe continuation of the closed stream must not reopen it
+      teardown();
+    },
+    resume: () => {
+      if (stopped || !paused) return;
+      paused = false;
+      attempt = 0;
+      open();
+    },
+  };
+  live.add(handle);
   open();
 
   return () => {
+    live.delete(handle);
     stopped = true;
     teardown();
     if (typeof window !== "undefined") window.removeEventListener("online", onOnline);
