@@ -1,4 +1,5 @@
 /** Domain constants ported 1:1 from the prototype (docs/analysis/prototype.md §4). */
+import type { IncomePayer } from "./types";
 
 export const ALL = "Vše" as const;
 
@@ -105,6 +106,13 @@ export const BUDGET_COLORS: ReadonlyArray<{ value: BudgetColorValue; label: stri
   { value: "green", label: "V budgetu", color: "#1f8a4c" },
   { value: "blue", label: "Budoucnost", color: "var(--fm-blue)" },
 ];
+
+/** Print income payer („Kdo platil"); order = radio order in the form. */
+export const PAYERS: ReadonlyArray<{ value: IncomePayer; label: string }> = [
+  { value: "spolek", label: "Spolek" },
+  { value: "as", label: "Akciová společnost" },
+];
+export const PAYER_LABEL: Readonly<Record<IncomePayer, string>> = { spolek: "Spolek", as: "Akciová společnost" };
 
 /** Max attachment size (25 MB, keeps uploads under the Traefik 60 s read timeout). */
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;

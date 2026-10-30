@@ -8,8 +8,10 @@ import * as itemDup from "@/app/api/print-items/[id]/duplicate/route";
 import * as closeRoute from "@/app/api/print/years/[year]/close/route";
 import * as reportRoute from "@/app/api/print/years/[year]/report/route";
 import * as budgetRoute from "@/app/api/budget/route";
+import * as incomesRoute from "@/app/api/print-incomes/route";
+import * as incomeRoute from "@/app/api/print-incomes/[id]/route";
 import type { YearReport } from "@/lib/report";
-import type { Budget, PrintItem, PrintType } from "@/lib/types";
+import type { Budget, PrintIncome, PrintItem, PrintType } from "@/lib/types";
 import { call, getState, order, printCols, taskCols, withCleanDb } from "./helpers";
 
 withCleanDb();
@@ -104,6 +106,46 @@ describe("print items", () => {
     expect(st.printItems.every((i) => !i.archived)).toBe(true);
     expect(st.closures).toEqual([]);
     expect((await call(reportRoute.GET, { params: { year: "abc" } })).status).toBe(404);
+  });
+});
+
+describe("print incomes", () => {
+  it("CRUD with validation; year close / reopen archives incomes by paid date; report includes them", async () => {
+    const created = await call<PrintIncome>(incomesRoute.POST, {
+      method: "POST",
+      body: { title: " Dar sponzora ", amount: "2 500 Kč", paidDate: "2026-04-02", payer: "as" },
+    });
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    expect(created.body).toMatchObject({ title: "Dar sponzora", description: "", amount: 2500, paidDate: "2026-04-02", payer: "as", archived: false });
+    const other = await call<PrintIncome>(incomesRoute.POST, { method: "POST", body: { title: "Loňský", amount: 100, paidDate: "2025-01-01" } });
+    expect(other.body.payer).toBe("spolek");
+
+    expect((await call(incomesRoute.POST, { method: "POST", body: { title: "  " } })).status).toBe(400);
+    expect((await call(incomesRoute.POST, { method: "POST", body: { title: "x", payer: "jiny" } })).status).toBe(400);
+    expect((await call(incomesRoute.POST, { method: "POST", body: { title: "x", createdBy: crypto.randomUUID() } })).status).toBe(400);
+
+    const upd = await call<PrintIncome>(incomeRoute.PATCH, { method: "PATCH", params: { id: created.body.id }, body: { description: "na letáky", payer: "spolek" } });
+    expect(upd.body).toMatchObject({ description: "na letáky", payer: "spolek", amount: 2500 });
+    expect((await call(incomeRoute.PATCH, { method: "PATCH", params: { id: created.body.id }, body: { archived: true } })).status).toBe(400);
+    expect((await call(incomeRoute.PATCH, { method: "PATCH", params: { id: crypto.randomUUID() }, body: { title: "x" } })).status).toBe(404);
+
+    let st = await getState();
+    expect(st.printIncomes.map((i) => i.title)).toEqual(["Dar sponzora", "Loňský"]);
+
+    const close = await call<{ archivedCount: number }>(closeRoute.POST, { method: "POST", params: { year: "2026" } });
+    expect(close.body.archivedCount).toBe(1);
+    st = await getState();
+    expect(st.printIncomes.find((i) => i.id === created.body.id)?.archived).toBe(true);
+    expect(st.printIncomes.find((i) => i.id === other.body.id)?.archived).toBe(false);
+    const rep = await call<YearReport>(reportRoute.GET, { params: { year: "2026" } });
+    expect(rep.body).toMatchObject({ incomeTotal: 2500, net: -2500 });
+    expect(rep.body.incomes.map((i) => i.id)).toEqual([created.body.id]);
+    const reopen = await call<{ unarchivedCount: number }>(closeRoute.DELETE, { method: "DELETE", params: { year: "2026" } });
+    expect(reopen.body.unarchivedCount).toBe(1);
+
+    expect((await call(incomeRoute.DELETE, { method: "DELETE", params: { id: created.body.id } })).status).toBe(200);
+    expect((await call(incomeRoute.DELETE, { method: "DELETE", params: { id: created.body.id } })).status).toBe(404);
+    expect((await getState()).printIncomes.map((i) => i.id)).toEqual([other.body.id]);
   });
 });
 

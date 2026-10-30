@@ -111,7 +111,7 @@ export const updateTaskSchema = createTaskSchema.omit({ id: true, createdBy: tru
 export const moveSchema = z.object({ columnId: zId, beforeId: zId.nullable().optional() });
 export const duplicateSchema = z.object({ id: zId.optional(), createdBy: zPersonRef });
 
-async function assertPersons(tx: DbOrTx, ids: Array<string | null | undefined>) {
+export async function assertPersons(tx: DbOrTx, ids: Array<string | null | undefined>) {
   const wanted = [...new Set(ids.filter((v): v is string => !!v))];
   if (!wanted.length) return;
   const rows = await tx.select({ id: orgNodes.id }).from(orgNodes).where(and(inArray(orgNodes.id, wanted), eq(orgNodes.kind, "person")));

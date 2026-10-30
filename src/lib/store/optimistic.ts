@@ -4,7 +4,7 @@
  */
 import { appendOrder, planInsert, type InsertPosition } from "../sortOrder";
 import { descendantsOf } from "../tree";
-import type { AppState, BoardColumn, Budget, OrgNode, PrintItem, PrintType, Task } from "../types";
+import type { AppState, BoardColumn, Budget, OrgNode, PrintIncome, PrintItem, PrintType, Task } from "../types";
 
 type WithSort = { id: string; columnId: string; sortOrder: number };
 
@@ -136,11 +136,26 @@ export function deletePrintType(s: AppState, id: string): AppState {
   };
 }
 
+export function addPrintIncome(s: AppState, income: PrintIncome): AppState {
+  return { ...s, printIncomes: [...s.printIncomes, income] };
+}
+
+export function patchPrintIncome(s: AppState, id: string, patch: Partial<PrintIncome>): AppState {
+  return { ...s, printIncomes: s.printIncomes.map((i) => (i.id === id ? { ...i, ...patch } : i)) };
+}
+
+export function removePrintIncome(s: AppState, id: string): AppState {
+  return { ...s, printIncomes: s.printIncomes.filter((i) => i.id !== id) };
+}
+
+const incomeInYear = (i: PrintIncome, year: number) => !!i.paidDate && Number(i.paidDate.slice(0, 4)) === year;
+
 export function closeYear(s: AppState, year: number, closedAt: string = new Date().toISOString()): AppState {
   const inYear = (i: PrintItem) => !!i.realizationDate && Number(i.realizationDate.slice(0, 4)) === year;
   return {
     ...s,
     printItems: s.printItems.map((i) => (inYear(i) ? { ...i, archived: true } : i)),
+    printIncomes: s.printIncomes.map((i) => (incomeInYear(i, year) ? { ...i, archived: true } : i)),
     closures: [...s.closures.filter((c) => c.year !== year), { year, closedAt }],
   };
 }
@@ -150,6 +165,7 @@ export function reopenYear(s: AppState, year: number): AppState {
   return {
     ...s,
     printItems: s.printItems.map((i) => (inYear(i) ? { ...i, archived: false } : i)),
+    printIncomes: s.printIncomes.map((i) => (incomeInYear(i, year) ? { ...i, archived: false } : i)),
     closures: s.closures.filter((c) => c.year !== year),
   };
 }
@@ -196,6 +212,7 @@ export function deleteNode(s: AppState, id: string): AppState {
         : t,
     ),
     printItems: s.printItems.map((i) => (i.createdBy === id ? { ...i, createdBy: null } : i)),
+    printIncomes: s.printIncomes.map((i) => (i.createdBy === id ? { ...i, createdBy: null } : i)),
   };
 }
 

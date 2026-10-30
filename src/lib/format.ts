@@ -91,6 +91,11 @@ export function formatDayMonth(d: string | Date): string {
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
+/** "YYYY-MM-DD" of a local date. */
+export function isoDay(d: Date = new Date()): string {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
 /** "YYYY-MM" of a local date. */
 export function monthKey(d: Date): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;

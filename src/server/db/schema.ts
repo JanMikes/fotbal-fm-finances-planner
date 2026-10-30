@@ -116,6 +116,24 @@ export const printItems = pgTable(
   (t) => [index("print_items_column_idx").on(t.columnId, t.sortOrder)],
 );
 
+/** Print incomes („Příjmy") — deducted from the Tiskoviny total. Not on the kanban board (no column / sort order). */
+export const printIncomes = pgTable(
+  "print_incomes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    title: text("title").notNull(),
+    description: text("description").notNull().default(""),
+    amount: integer("amount"),
+    paidDate: date("paid_date", { mode: "string" }),
+    /** Who paid: 'spolek' | 'as' (Akciová společnost). */
+    payer: text("payer").notNull().default("spolek"),
+    archived: boolean("archived").notNull().default(false),
+    createdBy: uuid("created_by").references(() => orgNodes.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
+  },
+  (t) => [check("print_incomes_payer_check", sql`${t.payer} in ('spolek','as')`)],
+);
+
 export const printYearClosures = pgTable("print_year_closures", {
   year: integer("year").primaryKey(),
   closedAt: timestamp("closed_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),

@@ -3,7 +3,7 @@ import { card, column, columnsOf, getState, mouseDrag, openApp } from "./boards-
 
 /**
  * Tiskoviny tab (prototype §9): item CRUD with price → column sum + „Celkem", paid/owed/none tags, fixed columns,
- * type management, drag & drop, archived items hidden, „Uzavřít rok" opens the yearly report.
+ * type management, drag & drop, archived items hidden, „Uzavřít rok" opens the yearly report, incomes („Příjmy").
  * Everything carries TAG and the search box is set to TAG so other data does not interfere.
  */
 const PASSWORD = process.env.APP_PASSWORD ?? "dev-password";
@@ -39,13 +39,14 @@ test.afterAll(async ({ request }) => {
   const s = await getState(request);
   for (const i of s.printItems.filter((i) => i.title.includes(TAG))) await request.delete(`/api/print-items/${i.id}`);
   for (const t of s.printTypes.filter((t) => t.name.includes(TAG))) await request.delete(`/api/print-types/${t.id}`);
+  for (const i of s.printIncomes.filter((i) => i.title.includes(TAG))) await request.delete(`/api/print-incomes/${i.id}`);
 });
 
 test("fixed columns: no rename, no delete, no „+ Sloupec“; header button text", async ({ page, request }) => {
   const cols = columnsOf(await getState(request), "print");
   await open(page);
   await expect(page.locator("#board")).toHaveClass(/pboard/);
-  await expect(page.locator("#board .col .t")).toHaveText(cols.map((c) => c.title));
+  await expect(page.locator("#board .col .t")).toHaveText([...cols.map((c) => c.title), "Příjmy"]);
   await expect(page.locator("#board .col .t[contenteditable]")).toHaveCount(0);
   await expect(page.locator("#board .colh .x")).toHaveCount(0);
   await expect(page.locator("#addCol")).toHaveCount(0);
@@ -222,4 +223,62 @@ test("„Uzavřít rok“ opens the yearly report below the header; back / tab s
   await page.locator("#tabs button", { hasText: "Tiskoviny" }).click();
   await expect(page.locator("#pbar")).toBeVisible();
   await expect(report).toHaveCount(0);
+});
+
+test("incomes: add via „+ Přidat příjem“ → green column, deducted from „Celkem“; edit, type filter hides them, delete", async ({ page, request }) => {
+  const cols = columnsOf(await getState(request), "print");
+  const type = await firstType(request);
+  await createItem(request, { columnId: cols[0].id, typeId: type.id, title: `${TAG} INC Výdaj`, price: 3000, realizationDate: "2026-11-02" });
+  await open(page, `${TAG} INC`); // own search tag: items of the earlier tests stay out of „Celkem"
+  await expect(page.locator("#ptot")).toHaveText("3 000 Kč");
+
+  const col = page.getByTestId("income-col");
+  await expect(col.locator(".empty-col")).toHaveText("Žádné příjmy");
+  await col.getByRole("button", { name: "+ Přidat příjem" }).click();
+  const modal = page.getByTestId("income-modal");
+  await expect(modal.locator(".mh h2")).toHaveText("Nový příjem");
+  await expect(modal.locator("#incDate")).not.toHaveValue("");
+  await expect(modal.locator("input[name=incPayer][value=spolek]")).toBeChecked();
+  await modal.getByRole("button", { name: "Přidat příjem" }).click();
+  await expect(modal).toBeVisible(); // title is required
+  await modal.locator("#incTitle").fill(`${TAG} INC Dar`);
+  await modal.locator("#incDesc").fill("Příspěvek sponzora");
+  await modal.locator("#incDate").fill("2026-11-15");
+  await modal.locator("#incAmount").fill("1 200 Kč");
+  await modal.locator("label", { hasText: "Akciová společnost" }).click();
+  await modal.getByRole("button", { name: "Přidat příjem" }).click();
+  await expect(modal).toHaveCount(0);
+
+  const c = col.locator(".card", { has: page.locator("h3", { hasText: `${TAG} INC Dar` }) });
+  await expect(c.locator(".cat")).toHaveText("Akciová společnost");
+  await expect(c.locator(".paid-on")).toHaveText("Zaplaceno 15. 11. 2026");
+  await expect(c.locator(".price")).toHaveText("+1 200 Kč");
+  await expect(col.locator(".sum")).toHaveText("1 200 Kč");
+  await expect(page.locator("#ptot")).toHaveText("1 800 Kč");
+
+  // edit
+  await c.click();
+  await expect(modal.locator(".mh h2")).toHaveText("Příjem");
+  await expect(modal.locator("#incAmount")).toHaveValue("1200");
+  await modal.locator("#incAmount").fill("5000");
+  await modal.getByRole("button", { name: "Uložit" }).click();
+  await expect(page.locator("#ptot")).toHaveText("-2 000 Kč");
+
+  // month filter applies to the paid date; a specific media type hides incomes
+  await page.locator("#pmon").selectOption("2026-11");
+  await expect(col.locator(".card")).toHaveCount(1);
+  await page.locator("#pmon").selectOption("2026-10");
+  await expect(col.locator(".card")).toHaveCount(0);
+  await page.locator("#pmon").selectOption("all");
+  await page.locator("#ptype").selectOption(type.id);
+  await expect(col.locator(".card")).toHaveCount(0);
+  await expect(page.locator("#ptot")).toHaveText("3 000 Kč");
+  await page.locator("#ptype").selectOption("Vše");
+
+  // delete
+  page.once("dialog", (d) => void d.accept());
+  await c.click();
+  await modal.getByRole("button", { name: "Smazat" }).click();
+  await expect(col.locator(".card")).toHaveCount(0);
+  await expect(page.locator("#ptot")).toHaveText("3 000 Kč");
 });

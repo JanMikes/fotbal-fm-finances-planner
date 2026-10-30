@@ -25,3 +25,12 @@ body.dragging .board{scroll-snap-type:none}
 .subcat{display:inline-flex;align-items:center;gap:2px;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;background:var(--grey-100);color:var(--grey-700);padding:0 0 0 8px;border-radius:3px;min-height:32px}
 .subcat button{border:0;background:transparent;color:inherit;font-size:16px;line-height:1;min-width:32px;min-height:32px;cursor:pointer;border-radius:3px}
 .subcat button:hover{background:var(--grey-200);color:var(--fm-navy)}
+
+/* Tiskoviny incomes („Příjmy"): a green-tinted column after Hotovo; cards open on click (not draggable). */
+.col.income{background:#e7f3ec}
+.col.income .colh .t,.col.income .colh .sum{color:#1f8a4c}
+.col.income .card{cursor:pointer}
+.col.income .card .cat{background:#d3eadc;color:#17663a}
+.card .price.income{background:#1f8a4c}
+.card .paid-on{white-space:nowrap}
+.yv-r .pr.inc{color:#1f8a4c}

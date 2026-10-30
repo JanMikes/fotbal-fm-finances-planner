@@ -37,6 +37,11 @@ UI wording/look/behaviour = prototype (`prototype.md`) unless listed here.
 9. Fix prototype bugs listed in `prototype.md` (category to top level crash, archived items in print filter counts/month sums, whitespace-only column names).
 10. Legacy/dead prototype CSS & features (prototype.md §18) are NOT rebuilt.
 11. Multiple top-level roots supported (video).
+12. Tiskoviny incomes („Příjmy", project manager request 2026-10): separate `print_incomes` table (title, description,
+    paid date, amount, payer Spolek / Akciová společnost), shown as a green non-draggable „Příjmy" column after
+    Hotovo. „Celkem" and the month-select sums = visible spending − visible incomes (may go negative). The month filter
+    uses the paid date and search applies; incomes have no media type, so a specific type filter hides them. Year
+    close / reopen archives incomes by paid date; the yearly report lists them with total and net.
 
 ## Technical stack
 - **Next.js (latest stable, App Router, TypeScript strict, `output: 'standalone'`)**, React. The app is one

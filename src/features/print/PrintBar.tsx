@@ -1,7 +1,8 @@
 "use client";
 /**
  * Tiskoviny filter bar (prototype §9.1): type select with counts, month select with Kč sums, search,
- * „Typy médií", „Uzavřít rok" and the red „Celkem …" box. Archived items are excluded everywhere (DECISIONS #9).
+ * „Typy médií", „Uzavřít rok" and the red „Celkem …" box (spending − incomes). Archived items are excluded everywhere
+ * (DECISIONS #9).
  */
 import { printMonthOptions, printTotalLabel, printTypeOptions } from "@/lib/filters";
 import { kcs } from "@/lib/format";
@@ -12,7 +13,7 @@ export function PrintBar({ q, onQ, total, onTypes, onYear }: { q: string; onQ: (
   const [prefs, updatePrefs] = usePrefs();
   const types = printTypeOptions(state.printItems, state.printTypes);
   const month = prefs.prMonth || "all";
-  const months = printMonthOptions(state.printItems, prefs.prFilter, new Date(), month);
+  const months = printMonthOptions(state.printItems, prefs.prFilter, new Date(), month, state.printIncomes);
   return (
     <div className="bar" id="pbar">
       <div className="sub">

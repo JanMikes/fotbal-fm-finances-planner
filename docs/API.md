@@ -81,6 +81,7 @@ secrets invalidates all existing cookies.
   "tasks":       Task[],
   "printTypes":  PrintType[],
   "printItems":  PrintItem[],      // ALL items incl. archived (archived: true) — the board hides archived ones
+  "printIncomes": PrintIncome[],   // ALL incomes incl. archived; paidDate DESC (undated first), then newest
   "closures":    PrintYearClosure[],
   "attachments": Attachment[],     // metadata for tasks + print items; file url = /api/attachments/:id/file
   "budget":      Budget
@@ -131,10 +132,14 @@ Only the **tasks** board has editable columns. Print columns (Poptávka, Ve výr
 | POST | `/api/tasks/:id/duplicate` | `{id?, createdBy?}` | `201 {task, attachments}`. Copy „… (kopie)" placed right after the original; attachments (files duplicated on disk, links) copied. |
 | DELETE | `/api/tasks/:id` | – | `{ok:true}`; its attachments (rows + files) are deleted too. |
 
-## Print (`/api/print-types`, `/api/print-items`, `/api/print/years`)
+## Print (`/api/print-types`, `/api/print-items`, `/api/print-incomes`, `/api/print/years`)
 
 `PrintItem = {id, columnId, typeId, title, description, quantity, price, paidByClub, realizationDate, archived,
 sortOrder, createdBy, createdAt}`. `price: null` = „Bez ceny"; `paidByClub` = „Zaplaceno FK FM".
+
+`PrintIncome = {id, title, description, amount, paidDate, payer: "spolek"|"as", archived, createdBy, createdAt}` —
+„Příjmy": money received for print materials, deducted from the Tiskoviny „Celkem" (DECISIONS #12). Not on the
+kanban board (no column / sort order); `payer` = „Kdo platil" (Spolek / Akciová společnost).
 
 | Method | Path | Body | Response / rules |
 |---|---|---|---|
@@ -147,8 +152,11 @@ sortOrder, createdBy, createdAt}`. `price: null` = „Bez ceny"; `paidByClub` = 
 | PATCH | `/api/print-items/:id/move` | `{columnId, beforeId?}` | `PrintItem` |
 | POST | `/api/print-items/:id/duplicate` | `{id?, createdBy?}` | `201 {printItem, attachments}` |
 | DELETE | `/api/print-items/:id` | – | `{ok:true}` (+ attachments) |
-| POST | `/api/print/years/:year/close` | – | `{closure: {year, closedAt}, archivedCount}`. Sets `archived = true` on every item whose `realizationDate` is in `year` and upserts the closure row. |
-| DELETE | `/api/print/years/:year/close` | – | `{unarchivedCount}`. Un-archives that year's items and removes the closure. |
+| POST | `/api/print-incomes` | `{id?, title, description?, amount?, paidDate?, payer?, createdBy?}` | `201 PrintIncome`. `payer` defaults to `"spolek"`. |
+| PATCH | `/api/print-incomes/:id` | subset of the fields above (no id/createdBy) | `PrintIncome` |
+| DELETE | `/api/print-incomes/:id` | – | `{ok:true}` |
+| POST | `/api/print/years/:year/close` | – | `{closure: {year, closedAt}, archivedCount}`. Sets `archived = true` on every item whose `realizationDate` and every income whose `paidDate` is in `year` (`archivedCount` counts both) and upserts the closure row. |
+| DELETE | `/api/print/years/:year/close` | – | `{unarchivedCount}`. Un-archives that year's items and incomes and removes the closure. |
 | GET | `/api/print/years/:year/report` | – | `YearReport` (see below). |
 
 Items created later with a date in a closed year are **not** auto-archived (DECISIONS #6).
@@ -157,7 +165,7 @@ Items created later with a date in a closed year are **not** auto-archived (DECI
 
 ```jsonc
 {
-  "year": 2026, "years": [2026, 2025],          // years with dated items ∪ closed years ∪ current year, DESC
+  "year": 2026, "years": [2026, 2025],          // years with dated items/incomes ∪ closed years ∪ current year, DESC
   "closedAt": "…" | null,
   "itemCount": 12, "total": 54000, "paid": 30000, "owed": 24000, "quantity": 3500,
   "paidPct": 56, "owedPct": 44,                  // owedPct = 100 - paidPct (0 when total = 0)
@@ -168,7 +176,10 @@ Items created later with a date in a closed year are **not** auto-archived (DECI
   "topMonth": { "name": "Březen", "sum": 12000 } | null,
   "types": [{ "typeId": "…" | null, "name": "Letáky" | "—", "sum": 0, "count": 0, "quantity": 0 }],  // sum DESC
   "maxType": 20000,
-  "noDateCount": 2                               // non-archived items without a date (global, not per year)
+  "noDateCount": 2,                              // non-archived items without a date (global, not per year)
+  "incomes": PrintIncome[],                      // paid in the year (archived + active), newest first
+  "incomeTotal": 1200, "net": 52800,             // net = total − incomeTotal (may be negative)
+  "incomeNoDateCount": 0                         // non-archived incomes without a paid date (global)
 }
 ```
 
@@ -221,7 +232,7 @@ data: {}
 : ping 1791888428157          ← heartbeat comment every 25 s
 ```
 
-- `entity`: `org_node | column | task | print_type | print_item | print_year | budget | attachment`
+- `entity`: `org_node | column | task | print_type | print_item | print_income | print_year | budget | attachment`
 - `op`: `insert | update | delete | move | duplicate | close | reopen`
 - `id`: the primary entity id (`print_year`: the year number, `budget`: 1)
 - One event per committed mutation (sent via `pg_notify` inside the transaction, so it only arrives after commit),

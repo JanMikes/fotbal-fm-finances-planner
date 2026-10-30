@@ -1,6 +1,7 @@
 /** Yearly print report aggregation (prototype §9.6 `openYear`). Used by the API and usable client-side. */
 import { MNAMES, MONTH_ABBR } from "./constants";
-import type { PrintItem, PrintType, PrintYearClosure } from "./types";
+import { sortIncomes } from "./filters";
+import type { PrintIncome, PrintItem, PrintType, PrintYearClosure } from "./types";
 
 export interface ReportMonth {
   /** 1..12 */
@@ -31,7 +32,7 @@ export interface ReportType {
 
 export interface YearReport {
   year: number;
-  /** Years with any dated item ∪ closed years ∪ current year, DESC. */
+  /** Years with any dated item or income ∪ closed years ∪ current year, DESC. */
   years: number[];
   closedAt: string | null;
   /** Number of items (archived + active) with a realization date in the year. */
@@ -56,16 +57,26 @@ export interface YearReport {
   maxType: number;
   /** Non-archived items without a realization date (global, not per year). */
   noDateCount: number;
+  /** Incomes (archived + active) paid in the year, newest first. */
+  incomes: PrintIncome[];
+  /** Σ income amounts */
+  incomeTotal: number;
+  /** total − incomeTotal (may be negative) */
+  net: number;
+  /** Non-archived incomes without a paid date (global, not per year). */
+  incomeNoDateCount: number;
 }
 
 export function buildYearReport(args: {
   items: readonly PrintItem[];
+  incomes?: readonly PrintIncome[];
   types: readonly PrintType[];
   closures: readonly PrintYearClosure[];
   year: number;
   now?: Date;
 }): YearReport {
   const { items, types, closures, year } = args;
+  const allIncomes = args.incomes ?? [];
   const now = args.now ?? new Date();
   const currentYear = now.getFullYear();
   const typeName = new Map(types.map((t) => [t.id, t.name]));
@@ -74,6 +85,7 @@ export function buildYearReport(args: {
   const years = [
     ...new Set([
       ...items.filter((i) => i.realizationDate).map((i) => Number(i.realizationDate!.slice(0, 4))),
+      ...allIncomes.filter((i) => i.paidDate).map((i) => Number(i.paidDate!.slice(0, 4))),
       ...closures.map((c) => c.year),
       currentYear,
     ]),
@@ -81,6 +93,8 @@ export function buildYearReport(args: {
   const its = items.filter((i) => i.realizationDate && Number(i.realizationDate.slice(0, 4)) === year).sort(bySort);
   const noDateCount = items.filter((i) => !i.realizationDate && !i.archived).length;
   const price = (i: PrintItem) => i.price || 0;
+  const incomes = sortIncomes(allIncomes.filter((i) => i.paidDate && Number(i.paidDate.slice(0, 4)) === year));
+  const incomeTotal = incomes.reduce((s, i) => s + (i.amount || 0), 0);
 
   const total = its.reduce((s, i) => s + price(i), 0);
   const paid = its.filter((i) => i.paidByClub).reduce((s, i) => s + price(i), 0);
@@ -130,5 +144,9 @@ export function buildYearReport(args: {
     types: typeList,
     maxType: Math.max(1, ...typeList.map((t) => t.sum)),
     noDateCount,
+    incomes,
+    incomeTotal,
+    net: total - incomeTotal,
+    incomeNoDateCount: allIncomes.filter((i) => !i.paidDate && !i.archived).length,
   };
 }

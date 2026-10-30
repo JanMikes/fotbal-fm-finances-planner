@@ -1,4 +1,4 @@
-import type { AppState, BoardColumn, OrgNode, PrintItem, Task } from "@/lib/types";
+import type { AppState, BoardColumn, OrgNode, PrintIncome, PrintItem, Task } from "@/lib/types";
 
 let n = 0;
 const id = (p: string) => `${p}-${++n}`;
@@ -63,6 +63,21 @@ export function printItem(over: Partial<PrintItem> = {}): PrintItem {
   };
 }
 
+export function income(over: Partial<PrintIncome> = {}): PrintIncome {
+  return {
+    id: id("in"),
+    title: "Sponzorský dar",
+    description: "",
+    amount: null,
+    paidDate: null,
+    payer: "spolek",
+    archived: false,
+    createdBy: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    ...over,
+  };
+}
+
 export const columns: BoardColumn[] = [
   { id: "c1", boardId: "tasks", title: "Nápady", sortOrder: 1 },
   { id: "c2", boardId: "tasks", title: "K řešení", sortOrder: 2 },
@@ -81,6 +96,7 @@ export function state(over: Partial<AppState> = {}): AppState {
       { id: "ty2", name: "Vizitky", sortOrder: 2 },
     ],
     printItems: [],
+    printIncomes: [],
     closures: [],
     attachments: [],
     budget: { spolek: 0, asAmount: 0, monthlyInstallment: 7500, installmentFrom: null },

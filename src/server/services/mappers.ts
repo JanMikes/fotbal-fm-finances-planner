@@ -1,6 +1,6 @@
 /** DB row → API (domain) shape. */
-import type { Attachment, BoardColumn, BoardId, Budget, OrgNode, PrintItem, PrintType, PrintYearClosure, Task } from "@/lib/types";
-import type { attachments, boardColumns, budget, orgNodes, printItems, printTypes, printYearClosures, tasks } from "../db/schema";
+import type { Attachment, BoardColumn, BoardId, Budget, OrgNode, PrintIncome, PrintItem, PrintType, PrintYearClosure, Task } from "@/lib/types";
+import type { attachments, boardColumns, budget, orgNodes, printIncomes, printItems, printTypes, printYearClosures, tasks } from "../db/schema";
 
 type Row<T extends { $inferSelect: unknown }> = T["$inferSelect"];
 
@@ -65,6 +65,18 @@ export const mapPrintItem = (r: Row<typeof printItems>): PrintItem => ({
   realizationDate: r.realizationDate,
   archived: r.archived,
   sortOrder: num(r.sortOrder),
+  createdBy: r.createdBy,
+  createdAt: toIso(r.createdAt),
+});
+
+export const mapPrintIncome = (r: Row<typeof printIncomes>): PrintIncome => ({
+  id: r.id,
+  title: r.title,
+  description: r.description,
+  amount: r.amount,
+  paidDate: r.paidDate,
+  payer: r.payer as PrintIncome["payer"],
+  archived: r.archived,
   createdBy: r.createdBy,
   createdAt: toIso(r.createdAt),
 });

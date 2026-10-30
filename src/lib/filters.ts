@@ -1,7 +1,7 @@
 /** Board filtering, counts and month lists (prototype §7.1, §7.2, §7.6, §9.1, §9.2). */
 import { ALL, GROUPS, GROUP_FILTERS } from "./constants";
 import { kcs, monLab, monthKey } from "./format";
-import type { BoardColumn, BoardId, PrintItem, PrintType, Task } from "./types";
+import type { BoardColumn, BoardId, PrintIncome, PrintItem, PrintType, Task } from "./types";
 
 export type MonthFilter = "all" | "none" | string; // "YYYY-MM"
 
@@ -134,6 +134,38 @@ export function printVisible(item: PrintItem, typeName: string, f: PrintFilter):
 }
 
 /**
+ * Income visibility: same month (by paidDate) and search rules as print items. Incomes have no media type, so a
+ * specific type filter hides them (the total then is that type's spending only). Archived incomes are never shown.
+ */
+export function incomeVisible(income: PrintIncome, f: PrintFilter): boolean {
+  if (income.archived) return false;
+  if (f.typeId !== ALL) return false;
+  if (!monthMatches(income.paidDate, f.month)) return false;
+  if (f.q) {
+    const q = f.q.toLowerCase();
+    if (!(income.title + " " + income.description).toLowerCase().includes(q)) return false;
+  }
+  return true;
+}
+
+/** Incomes in display order: paidDate DESC (undated first), then newest first. */
+export function sortIncomes(incomes: readonly PrintIncome[]): PrintIncome[] {
+  return [...incomes].sort((a, b) => {
+    if (a.paidDate !== b.paidDate) {
+      if (!a.paidDate) return -1;
+      if (!b.paidDate) return 1;
+      return a.paidDate < b.paidDate ? 1 : -1;
+    }
+    return a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0;
+  });
+}
+
+/** Σ amount (null → 0). */
+export function sumIncomes(incomes: readonly PrintIncome[]): number {
+  return incomes.reduce((s, i) => s + (i.amount || 0), 0);
+}
+
+/**
  * Type select options with counts. Archived items are EXCLUDED (DECISIONS #9 fixes the prototype bug).
  * First option value "Vše" labelled `Všechny typy (n)`.
  */
@@ -154,22 +186,31 @@ export function sumPrices(items: readonly PrintItem[]): number {
 }
 
 /**
- * Print month select (prototype §9.1): 2 previous + current + 5 next months + months of (non-archived) items;
- * label carries the Kč sum for the active type filter, e.g. `Říjen 2026 · 4 500 Kč`. Archived items excluded (DECISIONS #9).
+ * Print month select (prototype §9.1): 2 previous + current + 5 next months + months of (non-archived) items and
+ * incomes; label carries the Kč total for the active type filter, e.g. `Říjen 2026 · 4 500 Kč` — spending minus
+ * incomes (incomes only count under „Všechny typy", like `incomeVisible`). Archived items excluded (DECISIONS #9).
  * The currently `selected` month is always included (see `taskMonthOptions`).
  */
-export function printMonthOptions(items: readonly PrintItem[], typeId: string, now: Date = new Date(), selected?: MonthFilter): MonthOption[] {
+export function printMonthOptions(
+  items: readonly PrintItem[],
+  typeId: string,
+  now: Date = new Date(),
+  selected?: MonthFilter,
+  incomes: readonly PrintIncome[] = [],
+): MonthOption[] {
   const active = items.filter((i) => !i.archived);
+  const activeIncomes = typeId === ALL ? incomes.filter((i) => !i.archived) : [];
   const set = new Set(monthRange(now, -2, 6));
   for (const i of active) if (i.realizationDate) set.add(i.realizationDate.slice(0, 7));
+  for (const i of activeIncomes) if (i.paidDate) set.add(i.paidDate.slice(0, 7));
   if (isMonthKey(selected)) set.add(selected);
   const months = [...set].sort();
   return [
     { value: "all", label: "Všechny měsíce" },
     ...months.map((m) => {
-      const sum = sumPrices(
-        active.filter((i) => (typeId === ALL || i.typeId === typeId) && i.realizationDate && i.realizationDate.slice(0, 7) === m),
-      );
+      const sum =
+        sumPrices(active.filter((i) => (typeId === ALL || i.typeId === typeId) && i.realizationDate && i.realizationDate.slice(0, 7) === m)) -
+        sumIncomes(activeIncomes.filter((i) => i.paidDate && i.paidDate.slice(0, 7) === m));
       return { value: m, label: monLab(m) + (sum ? " · " + kcs(sum) : ""), value2: sum };
     }),
     { value: "none", label: "Bez termínu" },

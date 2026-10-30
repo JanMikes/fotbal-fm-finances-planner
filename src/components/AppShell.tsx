@@ -3,6 +3,7 @@
  * App shell (prototype §2): `.app` (header + active tab) and its sibling `#modalRoot` (modals + yearly report, kept
  * outside `.app` so the print stylesheet `body>.app{display:none}` prints only the report).
  */
+import { IncomeModal } from "@/features/print/IncomeModal";
 import { PrintModal } from "@/features/print/PrintModal";
 import { PrintTab } from "@/features/print/PrintTab";
 import { PrintTypesModal } from "@/features/print/PrintTypesModal";
@@ -65,6 +66,8 @@ function ModalHost() {
       return <TaskModal key={key} id={modal.id} columnId={modal.columnId} onClose={closeModal} onOpenTask={(id) => openTask(id)} />;
     case "print":
       return <PrintModal key={key} id={modal.id} columnId={modal.columnId} onClose={closeModal} onOpenItem={(id) => openPrint(id)} />;
+    case "income":
+      return <IncomeModal key={key} id={modal.id} onClose={closeModal} />;
     case "types":
       return <PrintTypesModal key={key} onClose={closeModal} />;
   }

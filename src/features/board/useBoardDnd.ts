@@ -82,7 +82,8 @@ export function useBoardDnd(
     if (!p || !p.active || !cur) return;
     if (ghostRef.current) ghostRef.current.style.transform = transformOf(p);
     const el = document.elementFromPoint(p.x, p.y);
-    const col = el?.closest<HTMLElement>(".col") ?? null;
+    // only board columns (data-col) are drop targets — not the print board's income column
+    const col = el?.closest<HTMLElement>(".col[data-col]") ?? null;
     if (!col || !boardRef.current?.contains(col)) {
       // pointer outside every column: the placeholder stays where it was
       if (cur.overCol !== null) commit({ ...cur, overCol: null });

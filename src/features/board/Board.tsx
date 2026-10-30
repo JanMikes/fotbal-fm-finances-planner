@@ -3,7 +3,7 @@
  * Generic kanban board (prototype §7.3 / §9.3) used by Úkoly and Tiskoviny.
  * DOM / class names follow the prototype so the ported CSS applies:
  *   main.board[.pboard] > section.col[data-col] > (.colh > .t .c [.sum] [.x]) + (.list[data-list] > .card[data-id]…) + button.add
- *   + button.addcol (tasks only)
+ *   + button.addcol (tasks only) + `after` (print: the income column)
  */
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -29,6 +29,8 @@ export interface BoardProps<T extends BoardItem> {
   onOpen: (id: string) => void;
   onAdd: (columnId: string) => void;
   onMove: (id: string, columnId: string, beforeId: string | null) => void;
+  /** Extra content after the columns, inside the scrolling board (print: the „Příjmy" column). Not a drop target. */
+  after?: ReactNode;
   /** Tasks board only. */
   columnEditing?: {
     onRename: (id: string, title: string) => void;
@@ -38,7 +40,7 @@ export interface BoardProps<T extends BoardItem> {
 }
 
 export function Board<T extends BoardItem>(props: BoardProps<T>) {
-  const { mode, columns, visible, renderCard, columnExtra, emptyText, addText, onOpen, onAdd, onMove, columnEditing } = props;
+  const { mode, columns, visible, renderCard, columnExtra, emptyText, addText, onOpen, onAdd, onMove, after, columnEditing } = props;
   const boardRef = useRef<HTMLElement | null>(null);
   const { drag, ghost, ghostRef, cardPointerDown, wasDragging } = useBoardDnd(boardRef, onMove);
 
@@ -114,6 +116,7 @@ export function Board<T extends BoardItem>(props: BoardProps<T>) {
           </section>
         );
       })}
+      {after}
       {columnEditing && (
         <button
           className="addcol"

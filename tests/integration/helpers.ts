@@ -19,7 +19,7 @@ export function adminPool(): pg.Pool {
 /** Empty all tables and re-apply the structural seed migration. */
 export async function resetData() {
   await adminPool().query(
-    "truncate attachments, tasks, print_items, print_types, print_year_closures, board_columns, boards, org_nodes, budget restart identity cascade",
+    "truncate attachments, tasks, print_items, print_incomes, print_types, print_year_closures, board_columns, boards, org_nodes, budget restart identity cascade",
   );
   await adminPool().query(SEED_SQL);
 }

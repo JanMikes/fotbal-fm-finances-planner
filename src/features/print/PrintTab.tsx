@@ -1,13 +1,17 @@
 "use client";
-/** Tiskoviny tab: filter bar + board with the three fixed columns (prototype §9, DECISIONS #1). */
+/**
+ * Tiskoviny tab: filter bar + board with the three fixed columns (prototype §9, DECISIONS #1) + the „Příjmy" column.
+ * „Celkem" = visible spending − visible incomes.
+ */
 import { useState } from "react";
 import { useUi } from "@/components/UiContext";
 import { attachmentCounts } from "@/features/attachments/AttachmentBox";
 import { Board } from "@/features/board/Board";
-import { columnsOf, itemsInColumn, printVisible, sumPrices } from "@/lib/filters";
+import { columnsOf, incomeVisible, itemsInColumn, printVisible, sortIncomes, sumIncomes, sumPrices } from "@/lib/filters";
 import { kcs } from "@/lib/format";
 import { useActions, useAppState, usePrefs } from "@/lib/store/react";
-import type { PrintItem } from "@/lib/types";
+import type { PrintIncome, PrintItem } from "@/lib/types";
+import { IncomeCard } from "./IncomeCard";
 import { PrintBar } from "./PrintBar";
 import { PrintCard } from "./PrintCard";
 
@@ -17,7 +21,7 @@ export function PrintTab() {
   const state = useAppState();
   const [prefs] = usePrefs();
   const actions = useActions();
-  const { openPrint, openTypes, setReportOpen } = useUi();
+  const { openPrint, openIncome, openTypes, setReportOpen } = useUi();
   const [q, setQ] = useState("");
 
   const cols = columnsOf(state.columns, "print");
@@ -27,7 +31,8 @@ export function PrintTab() {
   const visible = new Map<string, PrintItem[]>(
     cols.map((c) => [c.id, itemsInColumn(state.printItems, c.id).filter((i) => printVisible(i, typeName.get(i.typeId) ?? "", filter))]),
   );
-  const total = sumPrices([...visible.values()].flat());
+  const incomes = sortIncomes(state.printIncomes.filter((i) => incomeVisible(i, filter)));
+  const total = sumPrices([...visible.values()].flat()) - sumIncomes(incomes);
   const counts = attachmentCounts(state.attachments, "print");
 
   return (
@@ -46,7 +51,45 @@ export function PrintTab() {
         onOpen={(id) => openPrint(id)}
         onAdd={(colId) => openPrint(null, colId)}
         onMove={(id, colId, beforeId) => void actions.movePrintItem(id, colId, beforeId).catch(noop)}
+        after={<IncomeColumn incomes={incomes} onOpen={openIncome} />}
       />
     </>
+  );
+}
+
+/** „Příjmy" column: not a drop target, cards are not draggable (no `data-col` / `data-id`, see useBoardDnd). */
+function IncomeColumn({ incomes, onOpen }: { incomes: readonly PrintIncome[]; onOpen: (id: string | null) => void }) {
+  return (
+    <section className="col income" data-testid="income-col">
+      <div className="colh">
+        <span className="t">Příjmy</span>
+        <span className="c">{incomes.length}</span>
+        <span className="sum">{kcs(sumIncomes(incomes))}</span>
+      </div>
+      <div className="list">
+        {incomes.map((i) => (
+          <div
+            key={i.id}
+            className="card"
+            data-income={i.id}
+            role="button"
+            tabIndex={0}
+            onClick={() => onOpen(i.id)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onOpen(i.id);
+              }
+            }}
+          >
+            <IncomeCard income={i} />
+          </div>
+        ))}
+        {incomes.length === 0 && <div className="empty-col">Žádné příjmy</div>}
+      </div>
+      <button className="add" type="button" id="addIncome" onClick={() => onOpen(null)}>
+        + Přidat příjem
+      </button>
+    </section>
   );
 }

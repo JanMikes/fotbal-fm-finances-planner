@@ -9,6 +9,7 @@ import type {
   Budget,
   OrgNode,
   ParentKind,
+  PrintIncome,
   PrintItem,
   PrintType,
   PrintYearClosure,
@@ -130,6 +131,9 @@ export type CreatePrintItemInput = Pick<PrintItem, "columnId" | "typeId" | "titl
 export type UpdatePrintItemInput = Partial<
   Pick<PrintItem, "columnId" | "typeId" | "title" | "description" | "quantity" | "price" | "paidByClub" | "realizationDate">
 >;
+export type CreatePrintIncomeInput = Pick<PrintIncome, "title"> &
+  Partial<Pick<PrintIncome, "id" | "description" | "amount" | "paidDate" | "payer" | "createdBy">>;
+export type UpdatePrintIncomeInput = Partial<Pick<PrintIncome, "title" | "description" | "amount" | "paidDate" | "payer">>;
 export interface MoveInput {
   columnId: string;
   /** Insert before this item; null/undefined = append to the end of the column. */
@@ -171,6 +175,9 @@ export const api = {
   duplicatePrintItem: (id: string, input: { id?: string; createdBy?: string | null } = {}) =>
     request<{ printItem: PrintItem; attachments: Attachment[] }>("POST", `/api/print-items/${id}/duplicate`, input),
   deletePrintItem: (id: string) => request<{ ok: true }>("DELETE", `/api/print-items/${id}`),
+  createPrintIncome: (input: CreatePrintIncomeInput) => request<PrintIncome>("POST", "/api/print-incomes", input),
+  updatePrintIncome: (id: string, input: UpdatePrintIncomeInput) => request<PrintIncome>("PATCH", `/api/print-incomes/${id}`, input),
+  deletePrintIncome: (id: string) => request<{ ok: true }>("DELETE", `/api/print-incomes/${id}`),
   closeYear: (year: number) => request<{ closure: PrintYearClosure; archivedCount: number }>("POST", `/api/print/years/${year}/close`),
   reopenYear: (year: number) => request<{ unarchivedCount: number }>("DELETE", `/api/print/years/${year}/close`),
 

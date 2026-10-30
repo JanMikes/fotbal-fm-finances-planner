@@ -1,8 +1,8 @@
-import { asc } from "drizzle-orm";
+import { asc, desc, sql } from "drizzle-orm";
 import type { AppState } from "@/lib/types";
 import { getDb } from "../db/client";
-import { attachments, boardColumns, budget, orgNodes, printItems, printTypes, printYearClosures, tasks } from "../db/schema";
-import { mapAttachment, mapBudget, mapClosure, mapColumn, mapNode, mapPrintItem, mapPrintType, mapTask } from "./mappers";
+import { attachments, boardColumns, budget, orgNodes, printIncomes, printItems, printTypes, printYearClosures, tasks } from "../db/schema";
+import { mapAttachment, mapBudget, mapClosure, mapColumn, mapNode, mapPrintIncome, mapPrintItem, mapPrintType, mapTask } from "./mappers";
 
 /** Everything for the initial load. Consistent snapshot (repeatable read, read only). */
 export async function getState(): Promise<AppState> {
@@ -14,6 +14,10 @@ export async function getState(): Promise<AppState> {
       const taskRows = await tx.select().from(tasks).orderBy(asc(tasks.sortOrder));
       const types = await tx.select().from(printTypes).orderBy(asc(printTypes.sortOrder));
       const items = await tx.select().from(printItems).orderBy(asc(printItems.sortOrder));
+      const incomes = await tx
+        .select()
+        .from(printIncomes)
+        .orderBy(sql`${printIncomes.paidDate} desc nulls first`, desc(printIncomes.createdAt));
       const closures = await tx.select().from(printYearClosures).orderBy(asc(printYearClosures.year));
       const atts = await tx.select().from(attachments).orderBy(asc(attachments.createdAt));
       const budgetRows = await tx.select().from(budget);
@@ -23,6 +27,7 @@ export async function getState(): Promise<AppState> {
         tasks: taskRows.map(mapTask),
         printTypes: types.map(mapPrintType),
         printItems: items.map(mapPrintItem),
+        printIncomes: incomes.map(mapPrintIncome),
         closures: closures.map(mapClosure),
         attachments: atts.map(mapAttachment),
         budget: mapBudget(budgetRows[0]),

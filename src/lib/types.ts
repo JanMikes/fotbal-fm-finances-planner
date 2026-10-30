@@ -5,6 +5,8 @@ export type BudgetColor = "blue" | "green" | "red";
 export type BoardId = "tasks" | "print";
 export type ParentKind = "task" | "print";
 export type AttachmentKind = "file" | "link";
+/** Who paid a print income: Spolek or Akciová společnost. */
+export type IncomePayer = "spolek" | "as";
 
 /** Org tree node. Person-only fields are null/empty on units and vice versa. */
 export interface OrgNode {
@@ -73,6 +75,21 @@ export interface PrintItem {
   createdAt: string;
 }
 
+/** Print income („Příjem") — deducted from the Tiskoviny total. */
+export interface PrintIncome {
+  id: string;
+  title: string;
+  description: string;
+  /** Kč, integer; null = no amount. */
+  amount: number | null;
+  /** "YYYY-MM-DD" („Zaplaceno dne") */
+  paidDate: string | null;
+  payer: IncomePayer;
+  archived: boolean;
+  createdBy: string | null;
+  createdAt: string;
+}
+
 export interface PrintYearClosure {
   year: number;
   closedAt: string;
@@ -106,6 +123,8 @@ export interface AppState {
   tasks: Task[];
   printTypes: PrintType[];
   printItems: PrintItem[];
+  /** Sorted by paidDate DESC (undated first), then createdAt. */
+  printIncomes: PrintIncome[];
   closures: PrintYearClosure[];
   attachments: Attachment[];
   budget: Budget;
@@ -113,7 +132,7 @@ export interface AppState {
 
 /** Realtime event pushed over SSE (`event: change`). */
 export interface ChangeEvent {
-  entity: "org_node" | "column" | "task" | "print_type" | "print_item" | "print_year" | "budget" | "attachment";
+  entity: "org_node" | "column" | "task" | "print_type" | "print_item" | "print_income" | "print_year" | "budget" | "attachment";
   op: "insert" | "update" | "delete" | "move" | "duplicate" | "close" | "reopen";
   id: string | number | null;
   clientId: string | null;

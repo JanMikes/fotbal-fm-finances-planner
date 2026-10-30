@@ -1,15 +1,16 @@
-/** Print types, year closures and the yearly report. */
+/** Print types, incomes, year closures and the yearly report. */
 import { asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { buildYearReport, type YearReport } from "@/lib/report";
 import { appendOrder } from "@/lib/sortOrder";
-import type { PrintType, PrintYearClosure } from "@/lib/types";
+import type { PrintIncome, PrintType, PrintYearClosure } from "@/lib/types";
 import { getDb, type DbOrTx } from "../db/client";
-import { printItems, printTypes, printYearClosures } from "../db/schema";
-import { badRequest, conflict, notFound, zId, zRequiredText, type Ctx } from "../http";
+import { printIncomes, printItems, printTypes, printYearClosures } from "../db/schema";
+import { badRequest, conflict, notFound, zId, zIsoDate, zMoney, zRequiredText, zTrimmed, type Ctx } from "../http";
 import { notify } from "../notify";
 import { pragueNow } from "../time";
-import { mapClosure, mapPrintItem, mapPrintType } from "./mappers";
+import { assertPersons } from "./boards";
+import { mapClosure, mapPrintIncome, mapPrintItem, mapPrintType } from "./mappers";
 import { lockContainers } from "./ordering";
 
 export const createPrintTypeSchema = z.object({ id: zId.optional(), name: zRequiredText(100) });
@@ -66,26 +67,88 @@ export async function deletePrintType(id: string, ctx: Ctx): Promise<{ movedTo: 
   });
 }
 
-const yearItems = (year: number) => sql`extract(year from ${printItems.realizationDate}) = ${year}`;
+// ---------------------------------------------------------------- incomes
 
-/** Close a year: archive every item with a realization date in that year and record the closure. */
+export const createPrintIncomeSchema = z.object({
+  id: zId.optional(),
+  title: zRequiredText(300),
+  description: zTrimmed(10000).optional(),
+  amount: zMoney.optional(),
+  paidDate: zIsoDate.nullable().optional(),
+  payer: z.enum(["spolek", "as"]).optional(),
+  createdBy: zId.nullable().optional(),
+});
+export const updatePrintIncomeSchema = createPrintIncomeSchema.omit({ id: true, createdBy: true }).partial().strict();
+
+export async function createPrintIncome(input: z.infer<typeof createPrintIncomeSchema>, ctx: Ctx): Promise<PrintIncome> {
+  return getDb().transaction(async (tx) => {
+    await assertPersons(tx, [input.createdBy]);
+    const [row] = await tx
+      .insert(printIncomes)
+      .values({
+        ...(input.id && { id: input.id }),
+        title: input.title,
+        description: input.description ?? "",
+        amount: input.amount ?? null,
+        paidDate: input.paidDate ?? null,
+        payer: input.payer ?? "spolek",
+        createdBy: input.createdBy ?? null,
+      })
+      .returning();
+    await notify(tx, ctx, "print_income", "insert", row.id);
+    return mapPrintIncome(row);
+  });
+}
+
+export async function updatePrintIncome(id: string, input: z.infer<typeof updatePrintIncomeSchema>, ctx: Ctx): Promise<PrintIncome> {
+  return getDb().transaction(async (tx) => {
+    const [current] = await tx.select().from(printIncomes).where(eq(printIncomes.id, id));
+    if (!current) throw notFound("Příjem nenalezen.");
+    const [row] = Object.keys(input).length
+      ? await tx.update(printIncomes).set(input).where(eq(printIncomes.id, id)).returning()
+      : [current];
+    await notify(tx, ctx, "print_income", "update", id);
+    return mapPrintIncome(row);
+  });
+}
+
+export async function deletePrintIncome(id: string, ctx: Ctx): Promise<void> {
+  return getDb().transaction(async (tx) => {
+    const rows = await tx.delete(printIncomes).where(eq(printIncomes.id, id)).returning({ id: printIncomes.id });
+    if (!rows.length) throw notFound("Příjem nenalezen.");
+    await notify(tx, ctx, "print_income", "delete", id);
+  });
+}
+
+// ---------------------------------------------------------------- years
+
+const yearItems = (year: number) => sql`extract(year from ${printItems.realizationDate}) = ${year}`;
+const yearIncomes = (year: number) => sql`extract(year from ${printIncomes.paidDate}) = ${year}`;
+
+/**
+ * Close a year: archive every item with a realization date (and every income paid) in that year and record the
+ * closure. `archivedCount` counts both.
+ */
 export async function closeYear(year: number, ctx: Ctx): Promise<{ closure: PrintYearClosure; archivedCount: number }> {
   return getDb().transaction(async (tx) => {
     const archived = await tx.update(printItems).set({ archived: true }).where(yearItems(year)).returning({ id: printItems.id });
+    const incomes = await tx.update(printIncomes).set({ archived: true }).where(yearIncomes(year)).returning({ id: printIncomes.id });
     const [row] = await tx
       .insert(printYearClosures)
       .values({ year })
       .onConflictDoUpdate({ target: printYearClosures.year, set: { closedAt: sql`now()` } })
       .returning();
     await notify(tx, ctx, "print_year", "close", year);
-    return { closure: mapClosure(row), archivedCount: archived.length };
+    return { closure: mapClosure(row), archivedCount: archived.length + incomes.length };
   });
 }
 
-/** Reopen a year: un-archive its items and remove the closure. */
+/** Reopen a year: un-archive its items and incomes and remove the closure. `unarchivedCount` counts both. */
 export async function reopenYear(year: number, ctx: Ctx): Promise<{ unarchivedCount: number }> {
   return getDb().transaction(async (tx) => {
-    const rows = await tx.update(printItems).set({ archived: false }).where(yearItems(year)).returning({ id: printItems.id });
+    const items = await tx.update(printItems).set({ archived: false }).where(yearItems(year)).returning({ id: printItems.id });
+    const incomes = await tx.update(printIncomes).set({ archived: false }).where(yearIncomes(year)).returning({ id: printIncomes.id });
+    const rows = [...items, ...incomes];
     await tx.delete(printYearClosures).where(eq(printYearClosures.year, year));
     await notify(tx, ctx, "print_year", "reopen", year);
     return { unarchivedCount: rows.length };
@@ -95,13 +158,15 @@ export async function reopenYear(year: number, ctx: Ctx): Promise<{ unarchivedCo
 /** `now` defaults to the Prague wall clock, so "current year/month" is right around midnight on 1 January. */
 export async function yearReport(year: number, now: Date = pragueNow()): Promise<YearReport> {
   const db = getDb();
-  const [items, types, closures] = await Promise.all([
+  const [items, incomes, types, closures] = await Promise.all([
     db.select().from(printItems).orderBy(asc(printItems.sortOrder)),
+    db.select().from(printIncomes),
     db.select().from(printTypes).orderBy(asc(printTypes.sortOrder)),
     db.select().from(printYearClosures),
   ]);
   return buildYearReport({
     items: items.map(mapPrintItem),
+    incomes: incomes.map(mapPrintIncome),
     types: types.map(mapPrintType),
     closures: closures.map(mapClosure),
     year,

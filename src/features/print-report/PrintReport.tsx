@@ -11,6 +11,7 @@
  * so close / reopen (optimistic store actions) and realtime refetches update it immediately.
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { PAYER_LABEL } from "@/lib/constants";
 import { formatDate, kcs, NBSP, nf, thousandsLabel } from "@/lib/format";
 import { buildYearReport } from "@/lib/report";
 import { useActions, useAppState } from "@/lib/store/react";
@@ -24,8 +25,8 @@ export function PrintReport({ onBack }: { onBack: () => void }) {
   const rootRef = useRef<HTMLDivElement>(null);
 
   const r = useMemo(
-    () => buildYearReport({ items: state.printItems, types: state.printTypes, closures: state.closures, year }),
-    [state.printItems, state.printTypes, state.closures, year],
+    () => buildYearReport({ items: state.printItems, incomes: state.printIncomes, types: state.printTypes, closures: state.closures, year }),
+    [state.printItems, state.printIncomes, state.printTypes, state.closures, year],
   );
   const typeName = useMemo(() => new Map(state.printTypes.map((t) => [t.id, t.name])), [state.printTypes]);
 
@@ -64,7 +65,8 @@ export function PrintReport({ onBack }: { onBack: () => void }) {
   }, []);
 
   const closeYear = () => {
-    if (!confirm(`Uzavřít rok ${year}? ${r.itemCount} položek za ${kcs(r.total)} se přesune do archivu.`)) return;
+    const incomes = r.incomes.length ? ` a ${r.incomes.length} příjmů za ${kcs(r.incomeTotal)}` : "";
+    if (!confirm(`Uzavřít rok ${year}? ${r.itemCount} položek za ${kcs(r.total)}${incomes} se přesune do archivu.`)) return;
     // errors roll back optimistically and surface via snapshot.error (global toast)
     actions.closeYear(year).catch(() => {});
   };
@@ -115,7 +117,7 @@ export function PrintReport({ onBack }: { onBack: () => void }) {
               Znovu otevřít
             </button>
           ) : (
-            <button className="btn primary" id="yrClose" type="button" disabled={r.itemCount === 0} onClick={closeYear}>
+            <button className="btn primary" id="yrClose" type="button" disabled={r.itemCount === 0 && r.incomes.length === 0} onClick={closeYear}>
               Uzavřít rok {year}
             </button>
           )}
@@ -129,6 +131,11 @@ export function PrintReport({ onBack }: { onBack: () => void }) {
             <i>
               {r.itemCount} položek · {nf(r.quantity)}{NBSP}ks
             </i>
+            {r.incomes.length ? (
+              <i>
+                Příjmy {kcs(r.incomeTotal)} · po odečtení {kcs(r.net)}
+              </i>
+            ) : null}
           </div>
           <div className="kp">
             <span>Zaplatil FK FM</span>
@@ -218,6 +225,31 @@ export function PrintReport({ onBack }: { onBack: () => void }) {
           )}
           {r.noDateCount && !r.closedAt ? (
             <p className="yv-e">{r.noDateCount} tiskovin nemá vyplněné datum realizace, a proto v přehledu nejsou.</p>
+          ) : null}
+        </section>
+        <section className="yv-card yv-list" data-testid="report-incomes">
+          <h2>Příjmy</h2>
+          {r.incomes.length ? (
+            <div className="yv-m">
+              <div className="yv-mh">
+                <b>Celkem příjmy</b>
+                <span className="o" />
+                <span>{kcs(r.incomeTotal)}</span>
+              </div>
+              {r.incomes.map((i) => (
+                <div className="yv-r" key={i.id}>
+                  <span className="nm">{i.title}</span>
+                  <span className="ty">{PAYER_LABEL[i.payer]}</span>
+                  <span className="q">{i.paidDate ? formatDate(i.paidDate) : ""}</span>
+                  <span className="pr inc">+{kcs(i.amount)}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="yv-e">V roce {year} nejsou žádné příjmy.</p>
+          )}
+          {r.incomeNoDateCount && !r.closedAt ? (
+            <p className="yv-e">{r.incomeNoDateCount} příjmů nemá vyplněné datum zaplacení, a proto v přehledu nejsou.</p>
           ) : null}
         </section>
       </div>

@@ -2,8 +2,8 @@
  * High-level mutations for the UI: optimistic update + API call (+ rollback via the store).
  * Every action returns the server response; it rejects (after rollback) on error so callers can show a message.
  */
-import { api, uuid, type BudgetInput, type RequestInit2, type CreateNodeInput, type MoveNodeInput, type NodeInput, type UpdatePrintItemInput, type UpdateTaskInput } from "../api";
-import type { Attachment, OrgNode, ParentKind, PrintItem, Task } from "../types";
+import { api, uuid, type BudgetInput, type RequestInit2, type CreateNodeInput, type MoveNodeInput, type NodeInput, type UpdatePrintIncomeInput, type UpdatePrintItemInput, type UpdateTaskInput } from "../api";
+import type { Attachment, OrgNode, ParentKind, PrintIncome, PrintItem, Task } from "../types";
 import * as o from "./optimistic";
 import type { AppStore } from "./store";
 
@@ -81,6 +81,16 @@ export function createActions(store: AppStore) {
     },
     deletePrintType(id: string) {
       return m((s) => o.deletePrintType(s, id), () => api.deletePrintType(id));
+    },
+    createPrintIncome(input: Omit<PrintIncome, "id" | "createdAt" | "archived"> & { id?: string }) {
+      const id = input.id ?? uuid();
+      return m((s) => o.addPrintIncome(s, { ...input, id, archived: false, createdAt: now() }), () => api.createPrintIncome({ ...input, id }));
+    },
+    updatePrintIncome(id: string, patch: UpdatePrintIncomeInput) {
+      return m((s) => o.patchPrintIncome(s, id, patch), () => api.updatePrintIncome(id, patch));
+    },
+    deletePrintIncome(id: string) {
+      return m((s) => o.removePrintIncome(s, id), () => api.deletePrintIncome(id));
     },
     closeYear(year: number) {
       return m((s) => o.closeYear(s, year), () => api.closeYear(year));

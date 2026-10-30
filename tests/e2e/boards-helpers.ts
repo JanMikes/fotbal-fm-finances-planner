@@ -33,6 +33,7 @@ export async function getState(request: APIRequestContext) {
     tasks: Array<{ id: string; columnId: string; title: string; category: string; sortOrder: number; leadId: string | null; ownerId: string | null }>;
     printTypes: Array<{ id: string; name: string; sortOrder: number }>;
     printItems: Array<{ id: string; columnId: string; typeId: string; title: string; price: number | null; paidByClub: boolean; sortOrder: number }>;
+    printIncomes: Array<{ id: string; title: string; amount: number | null }>;
     attachments: Array<{ id: string; parentId: string; kind: string; name: string; url: string }>;
   };
 }

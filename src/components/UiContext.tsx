@@ -8,6 +8,7 @@ import { createContext, useCallback, useContext, useMemo, useRef, useState, type
 export type ModalState =
   | { kind: "task"; id: string | null; columnId?: string; seq: number }
   | { kind: "print"; id: string | null; columnId?: string; seq: number }
+  | { kind: "income"; id: string | null; seq: number }
   | { kind: "types"; seq: number };
 
 interface UiCtx {
@@ -15,6 +16,8 @@ interface UiCtx {
   /** Open the task modal: existing task (`id`) or a new one in `columnId` (default = first column). */
   openTask: (id: string | null, columnId?: string) => void;
   openPrint: (id: string | null, columnId?: string) => void;
+  /** Open the income modal: existing income (`id`) or a new one. */
+  openIncome: (id: string | null) => void;
   openTypes: () => void;
   closeModal: () => void;
   reportOpen: boolean;
@@ -31,12 +34,13 @@ export function UiProvider({ children }: { children: ReactNode }) {
 
   const openTask = useCallback((id: string | null, columnId?: string) => setModal({ kind: "task", id, columnId, seq: next() }), [next]);
   const openPrint = useCallback((id: string | null, columnId?: string) => setModal({ kind: "print", id, columnId, seq: next() }), [next]);
+  const openIncome = useCallback((id: string | null) => setModal({ kind: "income", id, seq: next() }), [next]);
   const openTypes = useCallback(() => setModal({ kind: "types", seq: next() }), [next]);
   const closeModal = useCallback(() => setModal(null), []);
 
   const value = useMemo(
-    () => ({ modal, openTask, openPrint, openTypes, closeModal, reportOpen, setReportOpen }),
-    [modal, openTask, openPrint, openTypes, closeModal, reportOpen],
+    () => ({ modal, openTask, openPrint, openIncome, openTypes, closeModal, reportOpen, setReportOpen }),
+    [modal, openTask, openPrint, openIncome, openTypes, closeModal, reportOpen],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
