@@ -254,6 +254,8 @@ test("incomes: add via „+ Přidat příjem“ → green column, deducted from 
   await expect(c.locator(".paid-on")).toHaveText("Zaplaceno 15. 11. 2026");
   await expect(c.locator(".price")).toHaveText("+1 200 Kč");
   await expect(col.locator(".sum")).toHaveText("1 200 Kč");
+  await expect(page.locator("#pspent")).toHaveText("3 000 Kč");
+  await expect(page.locator("#preceived")).toHaveText("1 200 Kč");
   await expect(page.locator("#ptot")).toHaveText("1 800 Kč");
 
   // edit
@@ -262,6 +264,7 @@ test("incomes: add via „+ Přidat příjem“ → green column, deducted from 
   await expect(modal.locator("#incAmount")).toHaveValue("1200");
   await modal.locator("#incAmount").fill("5000");
   await modal.getByRole("button", { name: "Uložit" }).click();
+  await expect(page.locator("#preceived")).toHaveText("5 000 Kč");
   await expect(page.locator("#ptot")).toHaveText("-2 000 Kč");
 
   // month filter applies to the paid date; a specific media type hides incomes
@@ -272,6 +275,7 @@ test("incomes: add via „+ Přidat příjem“ → green column, deducted from 
   await page.locator("#pmon").selectOption("all");
   await page.locator("#ptype").selectOption(type.id);
   await expect(col.locator(".card")).toHaveCount(0);
+  await expect(page.locator("#preceived")).toHaveText("0 Kč");
   await expect(page.locator("#ptot")).toHaveText("3 000 Kč");
   await page.locator("#ptype").selectOption("Vše");
 

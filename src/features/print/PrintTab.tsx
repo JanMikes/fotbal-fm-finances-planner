@@ -32,12 +32,13 @@ export function PrintTab() {
     cols.map((c) => [c.id, itemsInColumn(state.printItems, c.id).filter((i) => printVisible(i, typeName.get(i.typeId) ?? "", filter))]),
   );
   const incomes = sortIncomes(state.printIncomes.filter((i) => incomeVisible(i, filter)));
-  const total = sumPrices([...visible.values()].flat()) - sumIncomes(incomes);
+  const spent = sumPrices([...visible.values()].flat());
+  const received = sumIncomes(incomes);
   const counts = attachmentCounts(state.attachments, "print");
 
   return (
     <>
-      <PrintBar q={q} onQ={setQ} total={total} onTypes={openTypes} onYear={() => setReportOpen(true)} />
+      <PrintBar q={q} onQ={setQ} spent={spent} received={received} onTypes={openTypes} onYear={() => setReportOpen(true)} />
       <Board<PrintItem>
         mode="print"
         columns={cols}

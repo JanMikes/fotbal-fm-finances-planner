@@ -1,14 +1,28 @@
 "use client";
 /**
  * Tiskoviny filter bar (prototype §9.1): type select with counts, month select with Kč sums, search,
- * „Typy médií", „Uzavřít rok" and the red „Celkem …" box (spending − incomes). Archived items are excluded everywhere
- * (DECISIONS #9).
+ * „Typy médií", „Uzavřít rok" and the totals: „Výdaje" (visible items), „Příjmy" (visible incomes) and the red
+ * „Celkem …" box = Výdaje − Příjmy. Archived items are excluded everywhere (DECISIONS #9).
  */
 import { printMonthOptions, printTotalLabel, printTypeOptions } from "@/lib/filters";
 import { kcs } from "@/lib/format";
 import { useAppState, usePrefs } from "@/lib/store/react";
 
-export function PrintBar({ q, onQ, total, onTypes, onYear }: { q: string; onQ: (q: string) => void; total: number; onTypes: () => void; onYear: () => void }) {
+export function PrintBar({
+  q,
+  onQ,
+  spent,
+  received,
+  onTypes,
+  onYear,
+}: {
+  q: string;
+  onQ: (q: string) => void;
+  spent: number;
+  received: number;
+  onTypes: () => void;
+  onYear: () => void;
+}) {
   const state = useAppState();
   const [prefs, updatePrefs] = usePrefs();
   const types = printTypeOptions(state.printItems, state.printTypes);
@@ -38,8 +52,16 @@ export function PrintBar({ q, onQ, total, onTypes, onYear }: { q: string; onQ: (
         <button className="btn outline" id="btnYear" type="button" onClick={onYear}>
           Uzavřít rok
         </button>
-        <div className="ptot">
-          <span id="ptotL">{printTotalLabel(month)}</span> <b id="ptot">{kcs(total)}</b>
+        <div className="ptots">
+          <div className="ptot spent">
+            <span>Výdaje</span> <b id="pspent">{kcs(spent)}</b>
+          </div>
+          <div className="ptot received">
+            <span>Příjmy</span> <b id="preceived">{kcs(received)}</b>
+          </div>
+          <div className="ptot">
+            <span id="ptotL">{printTotalLabel(month)}</span> <b id="ptot">{kcs(spent - received)}</b>
+          </div>
         </div>
       </div>
     </div>
