@@ -26,7 +26,7 @@ export function lastColumnId(columns: readonly BoardColumn[], board: BoardId): s
 }
 
 /**
- * Items of a column in display order. With `dateOf`: dated items first (date ASC), undated at the end;
+ * Items of a column in display order. With `dateOf`: dated items first (newest date first), undated at the end;
  * ties (same date / both undated) keep the manual drag order (`sortOrder`).
  */
 export function itemsInColumn<T extends { columnId: string; sortOrder: number }>(
@@ -42,7 +42,7 @@ export function itemsInColumn<T extends { columnId: string; sortOrder: number }>
     if (da !== db) {
       if (!da) return 1;
       if (!db) return -1;
-      return da < db ? -1 : 1;
+      return da < db ? 1 : -1;
     }
     return bySort(a, b);
   });
