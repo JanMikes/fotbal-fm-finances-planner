@@ -162,4 +162,15 @@ describe("columns", () => {
     const ts = [task({ columnId: "c1", sortOrder: 3 }), task({ columnId: "c2", sortOrder: 1 }), task({ columnId: "c1", sortOrder: 1.5 })];
     expect(itemsInColumn(ts, "c1").map((t) => t.sortOrder)).toEqual([1.5, 3]);
   });
+
+  it("itemsInColumn by date: date ASC, undated last, ties by sortOrder", () => {
+    const ts = [
+      task({ title: "none2", sortOrder: 5, dueDate: null }),
+      task({ title: "late", sortOrder: 1, dueDate: "2026-12-01" }),
+      task({ title: "none1", sortOrder: 2, dueDate: null }),
+      task({ title: "early-b", sortOrder: 4, dueDate: "2026-10-01" }),
+      task({ title: "early-a", sortOrder: 3, dueDate: "2026-10-01" }),
+    ].map((t) => ({ ...t, columnId: "c1" }));
+    expect(itemsInColumn(ts, "c1", (t) => t.dueDate).map((t) => t.title)).toEqual(["early-a", "early-b", "late", "none1", "none2"]);
+  });
 });

@@ -22,7 +22,7 @@ export function TasksTab() {
   const cols = columnsOf(state.columns, "tasks");
   const lastId = cols.length ? cols[cols.length - 1].id : null;
   const filter = { filter: prefs.filter, month: prefs.month, mine: prefs.mine, me: prefs.me, q };
-  const visible = new Map<string, Task[]>(cols.map((c) => [c.id, itemsInColumn(state.tasks, c.id).filter((t) => taskVisible(t, filter))]));
+  const visible = new Map<string, Task[]>(cols.map((c) => [c.id, itemsInColumn(state.tasks, c.id, (t) => t.dueDate).filter((t) => taskVisible(t, filter))]));
   const counts = attachmentCounts(state.attachments, "task");
 
   return (

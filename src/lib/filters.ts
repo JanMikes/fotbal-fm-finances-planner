@@ -25,9 +25,27 @@ export function lastColumnId(columns: readonly BoardColumn[], board: BoardId): s
   return cols.length ? cols[cols.length - 1].id : null;
 }
 
-/** Items of a column in display order. */
-export function itemsInColumn<T extends { columnId: string; sortOrder: number }>(items: readonly T[], columnId: string): T[] {
-  return items.filter((t) => t.columnId === columnId).sort(bySort);
+/**
+ * Items of a column in display order. With `dateOf`: dated items first (date ASC), undated at the end;
+ * ties (same date / both undated) keep the manual drag order (`sortOrder`).
+ */
+export function itemsInColumn<T extends { columnId: string; sortOrder: number }>(
+  items: readonly T[],
+  columnId: string,
+  dateOf?: (item: T) => string | null,
+): T[] {
+  const inCol = items.filter((t) => t.columnId === columnId);
+  if (!dateOf) return inCol.sort(bySort);
+  return inCol.sort((a, b) => {
+    const da = dateOf(a);
+    const db = dateOf(b);
+    if (da !== db) {
+      if (!da) return 1;
+      if (!db) return -1;
+      return da < db ? -1 : 1;
+    }
+    return bySort(a, b);
+  });
 }
 
 /** Category belongs to group (prototype `inGroup`). „Vše" matches everything. */

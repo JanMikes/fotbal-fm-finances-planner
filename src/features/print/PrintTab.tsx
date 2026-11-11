@@ -29,7 +29,7 @@ export function PrintTab() {
   const typeName = new Map(state.printTypes.map((t) => [t.id, t.name]));
   const filter = { typeId: prefs.prFilter, month: prefs.prMonth, q };
   const visible = new Map<string, PrintItem[]>(
-    cols.map((c) => [c.id, itemsInColumn(state.printItems, c.id).filter((i) => printVisible(i, typeName.get(i.typeId) ?? "", filter))]),
+    cols.map((c) => [c.id, itemsInColumn(state.printItems, c.id, (i) => i.realizationDate).filter((i) => printVisible(i, typeName.get(i.typeId) ?? "", filter))]),
   );
   const incomes = sortIncomes(state.printIncomes.filter((i) => incomeVisible(i, filter)));
   const spent = sumPrices([...visible.values()].flat());
