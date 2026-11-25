@@ -12,7 +12,17 @@ import { MAX_UPLOAD_BYTES } from "@/lib/constants";
 import type { Attachment, Task } from "@/lib/types";
 import { loginLimiter } from "@/server/auth/rateLimit";
 import { isValidSession, SESSION_COOKIE } from "@/server/auth/session";
-import { __dropListenConnectionForTests, isListening, shutdownRealtime, __resetRealtimeForTests } from "@/server/realtime/bus";
+import {
+  __dropListenConnectionForTests,
+  __failNextConnectsForTests,
+  __pendingTimersForTests,
+  backoffDelay,
+  ensureListening,
+  isListening,
+  realtimeStatus,
+  shutdownRealtime,
+  __resetRealtimeForTests,
+} from "@/server/realtime/bus";
 import { adminPool, call, getState, sessionCookie, taskCols, withCleanDb } from "./helpers";
 
 withCleanDb();
@@ -313,4 +323,63 @@ describe("realtime handshake", () => {
     await shutdownRealtime();
     __resetRealtimeForTests();
   });
+});
+
+describe("realtime reconnect", () => {
+  it("backoff is capped exponential with jitter (0.5 s → 30 s)", () => {
+    expect(backoffDelay(0, () => 0)).toBe(250);
+    expect(backoffDelay(0, () => 0.999999)).toBe(500);
+    expect(backoffDelay(3, () => 1)).toBe(4000);
+    expect(backoffDelay(10, () => 1)).toBe(30_000);
+    expect(backoffDelay(10, () => 0)).toBe(15_000);
+    expect(backoffDelay(10_000, () => 1)).toBe(30_000);
+  });
+
+  it("keeps retrying while the DB is unreachable, re-LISTENs, sends ONE resync and delivers NOTIFY again", async () => {
+    await shutdownRealtime();
+    __resetRealtimeForTests();
+    const ac = new AbortController();
+    const res = await realtime.GET(new Request("http://x/api/realtime", { signal: ac.signal }));
+    const reader = res.body!.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    const readUntil = async (needle: string, from = 0, ms = 10_000) => {
+      const deadline = Date.now() + ms;
+      while (!buf.slice(from).includes(needle)) {
+        if (Date.now() > deadline) throw new Error(`timeout waiting for ${needle}; got: ${buf}`);
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value);
+      }
+    };
+    await readUntil("event: hello");
+    const mark = buf.length;
+
+    // The DB "goes away": the connection drops and the next 3 attempts fail (the old code gave up silently here).
+    __failNextConnectsForTests(3);
+    __dropListenConnectionForTests();
+    expect(isListening()).toBe(false);
+    // While a backoff timer is pending, extra callers (health checks, new streams) must not trigger attempts.
+    await ensureListening();
+    await ensureListening();
+    expect(realtimeStatus().listening).toBe(false);
+
+    await readUntil("event: resync", mark, 15_000);
+    expect(isListening()).toBe(true);
+    await adminPool().query(`select pg_notify('app_changes', '{"entity":"task","op":"update","id":"after-outage","clientId":null}')`);
+    await readUntil("after-outage", mark);
+    expect(buf.slice(mark).match(/event: resync/g)?.length).toBe(1);
+    expect(buf.match(/event: hello/g)?.length).toBe(1);
+
+    // pg_stat_activity shows the LISTEN session
+    const { rows } = await adminPool().query(
+      `select count(*)::int as n from pg_stat_activity where datname = current_database() and query ilike 'LISTEN%'`,
+    );
+    expect(rows[0].n).toBeGreaterThanOrEqual(1);
+
+    ac.abort();
+    await shutdownRealtime();
+    expect(__pendingTimersForTests()).toEqual({ retry: false, probe: false });
+    __resetRealtimeForTests();
+  }, 30_000);
 });

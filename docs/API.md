@@ -244,7 +244,8 @@ data: {}
   heartbeats until then). So every change committed after the client received `hello` will be delivered.
   **Clients must refetch `/api/state` on every `hello`** (the first one included — it closes the gap between the
   initial snapshot and the live subscription) **and on every `resync`**.
-- `resync`: the server's LISTEN connection was lost and has been re-established (reconnect with exponential backoff,
-  liveness-probed every 30 s); events may have been missed → refetch. Event names `hello` / `change` / `resync` are
+- `resync`: the server's LISTEN connection was lost and has been re-established (it reconnects forever with capped
+  exponential backoff + jitter, 0.5 s → 30 s, and is liveness-probed every 30 s by re-issuing `LISTEN`); events
+  committed while it was down were not delivered → refetch. Event names `hello` / `change` / `resync` are
   a stable contract.
 - On SIGTERM the server closes all streams immediately; clients reconnect (and get a new `hello`).

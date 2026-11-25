@@ -17,7 +17,9 @@ pg.types.setTypeParser(1082, (v) => v);
 export function getPool(): pg.Pool {
   if (!cache.pool) {
     cache.pool = new pg.Pool({ connectionString: env.databaseUrl, max: 10, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 5_000 });
-    cache.pool.on("error", (err) => console.error("[db] idle client error", err));
+    // An idle pooled client lost its connection (e.g. DB restart). pg-pool already discarded it and opens a fresh
+    // one on the next query; this handler only keeps the 'error' event from crashing the process.
+    cache.pool.on("error", (err) => console.error("[db] idle client error (discarded, pool recovers by itself):", err.message));
   }
   return cache.pool;
 }
